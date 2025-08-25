@@ -14,7 +14,7 @@ class CarCameraController : public MongooseBehaviour {
 public:
     GameObject* target = nullptr;
     float smooth = 5.0f;
-    float zoom = 3.0f;
+    float zoom = 1.0f;
 
     Camera* camera = nullptr;
     float currentX = 0.0f;

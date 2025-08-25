@@ -12,6 +12,54 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Sanitizer options
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(ENABLE_MSAN "Enable MemorySanitizer" OFF)
+
+# Configure sanitizers
+if(ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        message(WARNING "Sanitizers work best with Debug or RelWithDebInfo build types")
+    endif()
+
+    set(SANITIZER_FLAGS "")
+
+    if(ENABLE_ASAN)
+        list(APPEND SANITIZER_FLAGS "-fsanitize=address")
+        message(STATUS "AddressSanitizer enabled")
+    endif()
+
+    if(ENABLE_UBSAN)
+        list(APPEND SANITIZER_FLAGS "-fsanitize=undefined")
+        message(STATUS "UndefinedBehaviorSanitizer enabled")
+    endif()
+
+    if(ENABLE_TSAN)
+        if(ENABLE_ASAN)
+            message(FATAL_ERROR "ThreadSanitizer cannot be used with AddressSanitizer")
+        endif()
+        list(APPEND SANITIZER_FLAGS "-fsanitize=thread")
+        message(STATUS "ThreadSanitizer enabled")
+    endif()
+
+    if(ENABLE_MSAN)
+        if(ENABLE_ASAN OR ENABLE_TSAN)
+            message(FATAL_ERROR "MemorySanitizer cannot be used with AddressSanitizer or ThreadSanitizer")
+        endif()
+        list(APPEND SANITIZER_FLAGS "-fsanitize=memory" "-fsanitize-memory-track-origins")
+        message(STATUS "MemorySanitizer enabled")
+    endif()
+
+    # Apply sanitizer flags
+    string(REPLACE ";" " " SANITIZER_FLAGS_STR "${SANITIZER_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZER_FLAGS_STR} -fno-omit-frame-pointer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS_STR} -fno-omit-frame-pointer")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SANITIZER_FLAGS_STR}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${SANITIZER_FLAGS_STR}")
+endif()
+
 # Optionally allow the user to override the engine repo/tag
 set(AME_GIT_URL "https://github.com/CoCkMelon/A-Monogoose-Engine" CACHE STRING "Git URL for A-Monogoose-Engine")
 set(AME_GIT_TAG "master" CACHE STRING "Git tag/branch for A-Monogoose-Engine")
@@ -103,4 +151,3 @@ endif()
 
 # Install rule (optional)
 install(TARGETS game RUNTIME DESTINATION bin)
-

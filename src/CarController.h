@@ -69,6 +69,7 @@ public:
 
         // Wheel sprites (start with texture 0; GameManager will assign atlas+UVs)
         auto& sr1 = wheelBO.AddComponent<SpriteRenderer>();
+        sr1.z(1);
         sr1.texture(0); sr1.size({wheelRadius*2, wheelRadius*2}); sr1.sortingLayer(0); sr1.orderInLayer(0); sr1.z(0.0f);
         wheelBRenderer = &sr1;
         auto& sr2 = wheelFO.AddComponent<SpriteRenderer>();
@@ -93,7 +94,7 @@ public:
         if (!physics) return;
         b2World* w = (b2World*)physics->world;
         if (!w) return;
-        
+
         // Car body: place so that bottom of body aligns with wheel center at start
         float bodyY = groundY + wheelRadius + bodyHeight * 0.5f; // ensures bottom = wheelY
         {
@@ -115,20 +116,20 @@ public:
         // Wheels positioning
         float axleOffsetX = bodyWidth*0.35f;
         b2Vec2 bodyCenter = body->GetPosition();
-        
+
         // Position wheels at ground level where they should naturally rest
         float wheelX_B = bodyCenter.x - axleOffsetX;
         float wheelX_F = bodyCenter.x + axleOffsetX;
         float wheelY = groundY + wheelRadius; // Place wheels on the ground
-        
+
         // Create wheel bodies + circle fixtures
         {
             b2BodyDef wbd;
             wbd.type = b2_dynamicBody;
-            
+
             wbd.position.Set(wheelX_B, wheelY);
             wheelB = w->CreateBody(&wbd);
-            
+
             wbd.position.Set(wheelX_F, wheelY);
             wheelF = w->CreateBody(&wbd);
 
@@ -147,7 +148,7 @@ public:
         // Create wheel joints via Box2D C++ API
         b2WheelJointDef jd;
         b2Vec2 axis(0.0f, 1.0f); // suspension axis vertical
-        
+
         // Joint anchor points should align with wheel centers for proper rotation
         b2Vec2 anchorB = b2Vec2(wheelX_B, wheelY); // Same position as wheel center
         b2Vec2 anchorF = b2Vec2(wheelX_F, wheelY); // Same position as wheel center
@@ -172,7 +173,7 @@ public:
     void FixedUpdate(float dt) {
         // Check if physics body is properly initialized
         if (!body || !physics) return;
-        
+
         // Input: simple up/down arrows via asyncinput wrapper
         int dir = input_move_dir();
         spinning = input_yaw_dir();
@@ -180,10 +181,10 @@ public:
         float speed = -motorSpeed * drive; // sign for right-hand coord
         if (jointFL) jointFL->SetMotorSpeed(speed);
         if (jointFR) jointFR->SetMotorSpeed(speed);
-        
+
         // Apply torque for body rotation (much gentler)
         body->ApplyTorque(spinning * 500.0f, true);
-        
+
         // Add some angular damping to prevent excessive spinning
         float angularVel = body->GetAngularVelocity();
         if (abs(spinning) < 0.1f) { // Only damp when not actively steering
@@ -204,7 +205,7 @@ private:
             float angle = body->GetAngle(); // Use Box2D C++ API
             bodyObj.transform().position({bpos.x, bpos.y, 0.0f});
             bodyObj.transform().rotation(glm::angleAxis(angle, glm::vec3(0, 0, 1)));
-            
+
             // Also sync the main car GameObject transform so camera can follow it
             gameObject().transform().position({bpos.x, bpos.y, 0.0f});
             gameObject().transform().rotation(glm::angleAxis(angle, glm::vec3(0, 0, 1)));

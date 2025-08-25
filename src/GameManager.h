@@ -141,7 +141,6 @@ public:
         cameraObj = gameObject().scene()->Create("MainCamera");
         cameraCtl = &cameraObj.AddScript<CarCameraController>();
         cameraCtl->target = &car;
-        cameraCtl->zoom = 8.0f; // wider view for car
         cameraCtl->SetViewport(screenWidth, screenHeight);
     }
 
