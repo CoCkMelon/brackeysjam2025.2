@@ -17,3 +17,7 @@ Car::~Car() {
 void Car::inspectThrottle() {
   state->inspectThrottle();
 }
+
+void Car::inspectSteeringState() {
+  state->inspectSteering();
+}
