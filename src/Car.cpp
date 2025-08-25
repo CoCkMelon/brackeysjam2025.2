@@ -13,3 +13,7 @@ Car::~Car() {
   delete jumpState;
   delete boostState;
 }
+
+void Car::inspectThrottle() {
+  state->inspectThrottle();
+}
