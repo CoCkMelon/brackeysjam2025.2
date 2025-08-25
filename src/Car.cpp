@@ -18,6 +18,10 @@ void Car::inspectThrottle() {
   state->inspectThrottle();
 }
 
-void Car::inspectSteeringState() {
+void Car::inspectSteering() {
   state->inspectSteering();
+}
+
+void Car::inspectJump() {
+  state->inspectJump();
 }
