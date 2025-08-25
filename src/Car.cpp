@@ -7,4 +7,9 @@ Car::Car() {
   boostState = new CarState(this);
 }
 
-
+Car::~Car() {
+  delete throttleState;
+  delete steeringState;
+  delete jumpState;
+  delete boostState;
+}
