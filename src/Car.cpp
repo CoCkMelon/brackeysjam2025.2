@@ -25,3 +25,7 @@ void Car::inspectSteering() {
 void Car::inspectJump() {
   state->inspectJump();
 }
+
+void Car::inspectBoost() {
+  state->inspectBoost();
+}
