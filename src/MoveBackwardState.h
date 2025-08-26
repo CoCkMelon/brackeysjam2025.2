@@ -12,11 +12,11 @@ private:
 
 public:
   MoveBackwardState(Car* car);
-  void moveCarForward();
-  void moveCarBackward();
-  void makeCarJump();
-  void switchOnBoost();
-  void switchOffBoost();
+  void moveCarForward() override;
+  void moveCarBackward() override;
+  void makeCarJump() override;
+  void switchOnBoost() override;
+  void switchOffBoost() override;
 };
 
 #endif
