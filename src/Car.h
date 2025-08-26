@@ -21,6 +21,7 @@ public:
   void switchOffBoost();
   CarState* getMoveForward();
   CarState* getMoveBackward();
+  CarState* getJumpUp();
   CarState* getBoostOn();
   CarState* getBoostOff();
   void setCurrentState(CarState* newState);
