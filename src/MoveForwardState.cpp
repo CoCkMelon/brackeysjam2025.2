@@ -4,6 +4,10 @@ MoveForwardState::MoveForwardState(Car* car) {
   this->car = car;
 }
 
+MoveForwardState::~MoveForwardState() {
+  delete car;
+}
+
 void MoveForwardState::moveCarForward() override {
   std::cout << "Already moving forward.\n";
 }
