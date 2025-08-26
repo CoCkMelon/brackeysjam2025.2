@@ -7,12 +7,17 @@
 #include <iostream>
 
 class MoveForwardState : public CarState {
+private:
+  Car* car;
+
 public:
-  void moveCarForward(Car* car) override;
-  void moveCarBackward(Car* car) override;
-  void makeCarJump(Car* car) override;
-  void switchOnBoost(Car* car) override;
-  void switchOffBoost(Car* car) override;
+  MoveForwardState(Car* car);
+  ~MoveForwardState();
+  void moveCarForward() override;
+  void moveCarBackward() override;
+  void makeCarJump() override;
+  void switchOnBoost() override;
+  void switchOffBoost() override;
 };
 
 #endif
