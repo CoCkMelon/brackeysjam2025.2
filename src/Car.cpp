@@ -1,11 +1,11 @@
 #include "Car.h"
 
 Car::Car() {
-  moveForward = new MoveForwardState();
-  moveBackward = new MoveBackwardState();
-  jumpUp = new JumpUpState();
-  boostOn = new SwitchOnBoostState();
-  boostOff = new SwitchOffBoostState();
+  moveForward = new MoveForwardState(this);
+  moveBackward = new MoveBackwardState(this);
+  jumpUp = new JumpUpState(this);
+  boostOn = new SwitchOnBoostState(this);
+  boostOff = new SwitchOffBoostState(this);
 }
 
 Car::~Car() {
