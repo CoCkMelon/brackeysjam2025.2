@@ -1,5 +1,5 @@
 #ifndef SWITCH_ON_BOOST_STATE_H
-#define SWTICH_ON_BOOST_STATE_H
+#define SWITCH_ON_BOOST_STATE_H
 
 #include "Car.h"
 #include "CarState.h"
