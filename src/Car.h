@@ -23,7 +23,7 @@ public:
   CarState* getMoveBackward();
   CarState* getBoostOn();
   CarState* getBoostOff();
-  void setCurrentState(State* newState);
+  void setCurrentState(CarState* newState);
 };
 
 #endif
