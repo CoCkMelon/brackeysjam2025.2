@@ -12,6 +12,7 @@ private:
 
 public:
   MoveBackwardState(Car* car);
+  ~MoveBackwardState();
   void moveCarForward() override;
   void moveCarBackward() override;
   void makeCarJump() override;
