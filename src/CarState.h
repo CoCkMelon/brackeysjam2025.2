@@ -5,7 +5,7 @@ class Car;
 
 class CarState {
 public:
-  virtual ~State() {}
+  virtual ~CarState() {}
   virtual void moveCarForward() = 0;
   virtual void moveCarBackward() = 0;
   virtual void makeCarJump() = 0;
