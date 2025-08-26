@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -Wall -g
 
 TARGET = main
-SRCS = main.cpp input_local.cpp
+SRCS = Car.cpp JumpUpState.cpp MoveBackwardState.cpp MoveForwardState.cpp SwithcOnBoostState.cpp SwitchOffBoostState.cpp main.cpp 
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(TARGET) run
