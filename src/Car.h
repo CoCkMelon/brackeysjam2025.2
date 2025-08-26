@@ -2,6 +2,11 @@
 #define CAR_H
 
 #include "CarState.h"
+#include "MoveForwardState.h"
+#include "MoveBackwardState.h"
+#include "JumpUpState.h"
+#include "SwitchOnBoostState.h"
+#include "SwitchOffBoostState.h"
 
 class Car {
 public:
