@@ -13,22 +13,14 @@ extern "C" {
 #include <glad/gl.h>
 using namespace unitylike;
 #include "GameManager.h"
+#include "globals.h"
 
 // Globals for SDL callback
 static SDL_Window* window = nullptr;
 static SDL_GLContext glContext = nullptr;
-static AmeEcsWorld* ameWorld = nullptr;
-static Scene* scene = nullptr;
 static bool inputInitialized = false;
 static bool running = true;
-static int windowWidth = 1280;
-static int windowHeight = 720;
 static CarGameManager* gameManager = nullptr;
-
-// Fixed timestep
-static const float fixedTimeStep = 1.0f / 60.0f;
-static float accumulator = 0.0f;
-static Uint64 lastTime = 0;
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     SDL_SetAppMetadata("Unity-like Box2D Car", "1.0", "com.example.unitylike-box2d-car");
@@ -54,7 +46,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
     // ECS + scene
     ameWorld = ame_ecs_world_create();
-    ecs_world_t* world = (ecs_world_t*)ame_ecs_world_ptr(ameWorld);
+    world = (ecs_world_t*)ame_ecs_world_ptr(ameWorld);
     scene = new Scene(world);
 
     // Input

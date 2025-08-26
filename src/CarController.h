@@ -1,4 +1,6 @@
 #pragma once
+#include "box2d/b2_revolute_joint.h"
+#include "box2d/b2_wheel_joint.h"
 #include "input_local.h"
 #include "unitylike/Scene.h"
 #include <glad/gl.h>
@@ -90,7 +92,7 @@ public:
         }
     }
 
-    void Start() override {
+    void Start() {
         if (!physics) return;
         b2World* w = (b2World*)physics->world;
         if (!w) return;
@@ -204,7 +206,7 @@ private:
             b2Vec2 bpos = body->GetPosition();
             float angle = body->GetAngle(); // Use Box2D C++ API
             bodyObj.transform().position({bpos.x, bpos.y, 0.0f});
-            bodyObj.transform().rotation(glm::angleAxis(angle, glm::vec3(0, 0, 1)));
+            bodyObj.transform().rotation(glm::angleAxis(angle*2, glm::vec3(0, 0, 1)));
 
             // Also sync the main car GameObject transform so camera can follow it
             gameObject().transform().position({bpos.x, bpos.y, 0.0f});
@@ -212,13 +214,13 @@ private:
         }
         if (wheelBRenderer && wheelB) {
             b2Vec2 wpos = wheelB->GetPosition();
-            float angle = wheelB->GetAngle(); // Use Box2D C++ API
+            float angle = wheelB->GetAngle()*2; // Use Box2D C++ API
             wheelBO.transform().position({wpos.x, wpos.y, 0.0f});
             wheelBO.transform().rotation(glm::angleAxis(angle, glm::vec3(0, 0, 1)));
         }
         if (wheelFRenderer && wheelF) {
             b2Vec2 wpos = wheelF->GetPosition();
-            float angle = wheelF->GetAngle(); // Use Box2D C++ API
+            float angle = wheelF->GetAngle()*2; // Use Box2D C++ API
             wheelFO.transform().position({wpos.x, wpos.y, 0.0f});
             wheelFO.transform().rotation(glm::angleAxis(angle, glm::vec3(0, 0, 1)));
         }
