@@ -1,6 +1,15 @@
+/*
 #include "unitylike/Scene.h"
 #include "input_local.h"
-
+*/
+#include "Car.h"
+#include "CarState.h"
+#include "MoveForwardState.h"
+#include "MoveBackwardState.h"
+#include "JumpUpState.h"
+#include "SwitchOnBoostState.h"
+#include "SwitchOffBoostState.cpp"
+/*
 extern "C" {
 #include "ame/ecs.h"
 #include "ame/render_pipeline_ecs.h"
@@ -143,4 +152,13 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result) {
     if (window) { SDL_DestroyWindow(window); window = nullptr; }
     SDL_Quit();
 }
-
+*/
+int main() {
+  Car* car = new Car();
+  car->moveCarForward();
+  car->moveCarBackward();
+  car->makeCarJump();
+  car->switchOnBoost();
+  car->switchOffBoost();
+  return 0;
+}
