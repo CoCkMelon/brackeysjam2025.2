@@ -1,6 +1,8 @@
 #ifndef CAR_H
 #define CAR_H
 
+#include "CarState.h"
+
 class Car {
 public:
   CarState* moveForward;
