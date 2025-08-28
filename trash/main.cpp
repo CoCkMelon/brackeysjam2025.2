@@ -1,10 +1,15 @@
 #include "unitylike/Scene.h"
-#include "input_local.h"
 
 extern "C" {
 #include "ame/ecs.h"
 #include "ame/render_pipeline_ecs.h"
 }
+
+// After engine/flecs headers are included, enable app-side guards to prevent
+// accidental pipeline/system manipulation in application code.
+// #include "ame/flecs_guard.h"
+
+#include "input_local.h"
 
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
@@ -47,8 +52,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     // ECS + scene
     ameWorld = ame_ecs_world_create();
     world = (ecs_world_t*)ame_ecs_world_ptr(ameWorld);
+    
+    // Use default pipeline - no custom setup needed
+    
     scene = new Scene(world);
-
     // Input
     inputInitialized = input_init();
 
