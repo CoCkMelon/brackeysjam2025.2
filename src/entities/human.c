@@ -76,6 +76,10 @@ void human_shutdown(Human* h){ (void)h; }
 
 void human_fixed(Human* h, float dt){
   if(!h||!h->body) return;
+  if(h->pending_teleport){
+    physics_teleport_body(h->body, h->pending_tx, h->pending_ty);
+    h->pending_teleport = 0;
+  }
   int dir = input_move_dir();
   float target_vx = 50.0f * (float)dir;
   bool grounded = physics_is_grounded(h->body);
@@ -105,10 +109,7 @@ void human_render(const Human* h){
   pipeline_sprite_quad(x,y,h->w,h->h,tex,1,1,1,1);
 }
 
-void human_set_position(Human* h, float x, float y){ if(!h||!h->body) return; // queue teleport by setting velocity to zero and moving next fixed step
-  physics_set_velocity(h->body, 0.0f, 0.0f);
-  physics_teleport_body(h->body, x, y);
-}
+void human_set_position(Human* h, float x, float y){ if(!h) return; h->pending_teleport = 1; h->pending_tx = x; h->pending_ty = y; }
 void human_get_position(const Human* h, float* x, float* y){ if(!h) return; physics_get_position(h->body,x,y); }
 void human_hide(Human* h, bool hide){ if(h) h->hidden = hide?1:0; }
 

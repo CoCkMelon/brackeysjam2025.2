@@ -30,6 +30,9 @@ typedef struct {
   HumanAnimConfig cfg;   // all animation controls in one place
   // Size in world units/pixels (Y-up)
   float w, h;
+  // Pending teleport request to be applied in human_fixed
+  int pending_teleport;
+  float pending_tx, pending_ty;
 } Human;
 
 void human_init(Human* h);
