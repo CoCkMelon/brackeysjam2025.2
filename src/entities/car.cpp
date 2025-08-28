@@ -46,20 +46,30 @@ void car_init(Car* c){
     bd.position.Set(base_x - c->cfg.axle_offset_x, wheelY); c->wheel_b = w->CreateBody(&bd);
     bd.position.Set(base_x + c->cfg.axle_offset_x, wheelY); c->wheel_f = w->CreateBody(&bd);
     b2CircleShape wheel; wheel.m_radius = c->cfg.wheel_radius;
-    b2FixtureDef wf; wf.shape=&wheel; wf.density=0.7f; wf.friction=1.2f;
+    b2FixtureDef wf; wf.shape=&wheel; wf.density=0.7f; wf.friction=2.0f; wf.restitution=0.0f;
     c->wheel_b->CreateFixture(&wf); c->wheel_f->CreateFixture(&wf);
   }
   // wheel joints
   {
     b2WheelJointDef jd; b2Vec2 axis(0.0f, 1.0f);
+    jd.collideConnected = false;
+    jd.enableLimit = true;
+    jd.lowerTranslation = -0.5f;
+    jd.upperTranslation =  0.2f;
+
+    // Rear wheel suspension + motor
     jd.Initialize(c->body, c->wheel_b, c->wheel_b->GetPosition(), axis);
-    jd.enableMotor=true; jd.motorSpeed=-c->cfg.motor_speed; jd.maxMotorTorque=c->cfg.motor_torque;
-    jd.stiffness = c->cfg.suspension_hz*c->cfg.suspension_hz*c->body->GetMass()*0.5f;
-    jd.damping = 2.0f * c->cfg.suspension_damping * sqrtf(jd.stiffness * c->body->GetMass());
-    jd.lowerTranslation=-0.5f; jd.upperTranslation=0.2f; jd.enableLimit=true;
+    jd.enableMotor = true;
+    jd.motorSpeed = -c->cfg.motor_speed;
+    jd.maxMotorTorque = c->cfg.motor_torque;
+    // Use Box2D helper to compute stiffness/damping from freq/damping ratio
+    b2LinearStiffness(jd.stiffness, jd.damping, c->cfg.suspension_hz, c->cfg.suspension_damping, c->body, c->wheel_b);
     c->joint_b = (b2WheelJoint*)physics_get_world()->CreateJoint(&jd);
 
+    // Front wheel suspension (free rolling)
     jd.Initialize(c->body, c->wheel_f, c->wheel_f->GetPosition(), axis);
+    jd.enableMotor = false;
+    b2LinearStiffness(jd.stiffness, jd.damping, c->cfg.suspension_hz, c->cfg.suspension_damping, c->body, c->wheel_f);
     c->joint_f = (b2WheelJoint*)physics_get_world()->CreateJoint(&jd);
   }
 }
