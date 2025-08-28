@@ -78,6 +78,10 @@ void car_shutdown(Car* c){ (void)c; }
 
 void car_fixed(Car* c, float dt){
   (void)dt; if(!c||!c->body) return;
+  if(c->pending_teleport){
+    physics_teleport_body(c->body, c->pending_tx, c->pending_ty + c->cfg.wheel_radius + c->cfg.body_h*0.5f);
+    c->pending_teleport = 0;
+  }
   int dir = input_move_dir(); float boost = (g_abilities.car_boost && input_boost_down())? c->cfg.boost_mul : 1.0f;
   float speed = -c->cfg.motor_speed * boost * (float)dir;
   if(c->joint_b) c->joint_b->SetMotorSpeed(speed);
@@ -102,6 +106,6 @@ void car_render(const Car* c){
   if(c->wheel_f){ b2Vec2 wf=c->wheel_f->GetPosition(); float d=c->cfg.wheel_radius*2.0f; pipeline_sprite_quad(wf.x, wf.y, d, d, c->tex_wheel,1,1,1,1);} 
 }
 
-void car_set_position(Car* c, float x, float y){ if(!c||!c->body) return; c->body->SetTransform(b2Vec2(x, y + c->cfg.wheel_radius + c->cfg.body_h*0.5f), c->body->GetAngle()); }
+void car_set_position(Car* c, float x, float y){ if(!c) return; c->pending_teleport = 1; c->pending_tx = x; c->pending_ty = y; }
 void car_get_position(const Car* c, float* x, float* y){ if(!c||!c->body){ if(x)*x=0; if(y)*y=0; return; } b2Vec2 p=c->body->GetPosition(); if(x)*x=p.x; if(y)*y=p.y; }
 

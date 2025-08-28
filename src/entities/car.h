@@ -36,6 +36,9 @@ typedef struct {
   // Simple textures (optional)
   GLuint tex_body;
   GLuint tex_wheel;
+  // Pending teleport request (applied in car_fixed)
+  int pending_teleport;
+  float pending_tx, pending_ty;
 } Car;
 
 void car_init(Car* c);

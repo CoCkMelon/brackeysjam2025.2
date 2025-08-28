@@ -36,9 +36,15 @@ b2Body* physics_create_dynamic_box(float x, float y, float w, float h, float den
   if(!g_world) return nullptr; b2BodyDef bd; bd.type=b2_dynamicBody; bd.position.Set(x,y); b2Body* b = g_world->CreateBody(&bd);
   b2PolygonShape sh; sh.SetAsBox(w*0.5f, h*0.5f); b2FixtureDef fd; fd.shape=&sh; fd.density=density; fd.friction=friction; b->CreateFixture(&fd); return b; }
 
+void physics_create_static_box(float x, float y, float w, float h, float friction){
+  if(!g_world) return; b2BodyDef bd; bd.type=b2_staticBody; bd.position.Set(x,y); b2Body* b = g_world->CreateBody(&bd);
+  b2PolygonShape sh; sh.SetAsBox(w*0.5f, h*0.5f); b2FixtureDef fd; fd.shape=&sh; fd.friction=friction; b->CreateFixture(&fd); }
+
 void physics_apply_impulse(b2Body* body, float ix, float iy){ if(!body) return; body->ApplyLinearImpulseToCenter(b2Vec2(ix,iy), true); }
 void physics_set_velocity(b2Body* body, float vx, float vy){ if(!body) return; body->SetLinearVelocity(b2Vec2(vx,vy)); }
+void physics_set_velocity_x(b2Body* body, float vx){ if(!body) return; b2Vec2 v = body->GetLinearVelocity(); v.x = vx; body->SetLinearVelocity(v); }
 void physics_get_position(b2Body* body, float* x, float* y){ if(!body) { if(x)*x=0; if(y)*y=0; return; } b2Vec2 p=body->GetPosition(); if(x)*x=p.x; if(y)*y=p.y; }
+void physics_get_velocity(b2Body* body, float* vx, float* vy){ if(!body){ if(vx)*vx=0; if(vy)*vy=0; return; } b2Vec2 v=body->GetLinearVelocity(); if(vx)*vx=v.x; if(vy)*vy=v.y; }
 
 bool physics_is_grounded_ex(b2Body* body, float normal_threshold, float max_upward_velocity){
   if(!body) return false;

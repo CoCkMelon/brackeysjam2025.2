@@ -82,7 +82,7 @@ void human_fixed(Human* h, float dt){
   if(grounded && input_jump_edge()){
     physics_apply_impulse(h->body, 0.0f, 100.0f);
   }
-  physics_set_velocity(h->body, target_vx, 0.0f);
+  physics_set_velocity_x(h->body, target_vx);
 
   // Animation selection using centralized config
   if(!grounded){ h->current_frame = (h->cfg.jump < h->frame_count ? h->cfg.jump : 0); }
@@ -105,7 +105,10 @@ void human_render(const Human* h){
   pipeline_sprite_quad(x,y,h->w,h->h,tex,1,1,1,1);
 }
 
-void human_set_position(Human* h, float x, float y){ if(!h||!h->body) return; physics_teleport_body(h->body, x, y); }
+void human_set_position(Human* h, float x, float y){ if(!h||!h->body) return; // queue teleport by setting velocity to zero and moving next fixed step
+  physics_set_velocity(h->body, 0.0f, 0.0f);
+  physics_teleport_body(h->body, x, y);
+}
 void human_get_position(const Human* h, float* x, float* y){ if(!h) return; physics_get_position(h->body,x,y); }
 void human_hide(Human* h, bool hide){ if(h) h->hidden = hide?1:0; }
 

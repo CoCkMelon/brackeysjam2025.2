@@ -177,6 +177,10 @@ int game_app_init(void){
   // Create a small "ball" as a dynamic box to demonstrate spatial audio
   g_ball_body = physics_create_dynamic_box(200.0f, 150.0f, 6.0f, 6.0f, 0.5f, 0.6f);
   physics_set_velocity(g_ball_body, 30.0f, 0.0f);
+
+  // Simple ground/platform so things don't fall forever
+  physics_create_static_box(0.0f, 100.0f, 1000.0f, 10.0f, 0.8f);
+
   car_set_position(&g_car, 150.0f, 120.0f);
   human_set_position(&g_human, 120.0f, 120.0f);
 

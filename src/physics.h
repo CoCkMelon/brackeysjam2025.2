@@ -16,9 +16,13 @@ void physics_shutdown(void);
 typedef struct b2Body b2Body;
 
 b2Body* physics_create_dynamic_box(float x, float y, float w, float h, float density, float friction);
+// Create a static box (e.g., ground/platform)
+void physics_create_static_box(float x, float y, float w, float h, float friction);
 void physics_apply_impulse(b2Body* body, float ix, float iy);
 void physics_set_velocity(b2Body* body, float vx, float vy);
+void physics_set_velocity_x(b2Body* body, float vx);
 void physics_get_position(b2Body* body, float* x, float* y);
+void physics_get_velocity(b2Body* body, float* vx, float* vy);
 
 // Ground/contact helpers (default thresholds)
 bool physics_is_grounded(b2Body* body);
