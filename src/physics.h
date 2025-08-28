@@ -1,6 +1,6 @@
 #pragma once
-#include <stdbool.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,9 +15,19 @@ void physics_shutdown(void);
 // Human and car bodies (opaque)
 typedef struct b2Body b2Body;
 
-b2Body* physics_create_dynamic_box(float x, float y, float w, float h, float density, float friction);
-// Create a static box (e.g., ground/platform)
+b2Body* physics_create_dynamic_box(float x,
+                                   float y,
+                                   float w,
+                                   float h,
+                                   float density,
+                                   float friction);
+// Static colliders
 void physics_create_static_box(float x, float y, float w, float h, float friction);
+void physics_create_static_circle(float x, float y, float r, float friction);
+void physics_create_static_edge(float x1, float y1, float x2, float y2, float friction);
+void physics_create_static_chain(const float* xy_pairs, int count, bool loop, float friction);
+// Triangles array: pos points are grouped as triangles (3 vertices per tri)
+void physics_create_static_mesh_triangles(const float* pos, int vertex_count, float friction);
 void physics_apply_impulse(b2Body* body, float ix, float iy);
 void physics_set_velocity(b2Body* body, float vx, float vy);
 void physics_set_velocity_x(b2Body* body, float vx);
@@ -30,6 +40,10 @@ bool physics_is_grounded(b2Body* body);
 bool physics_is_grounded_ex(b2Body* body, float normal_threshold, float max_upward_velocity);
 // Teleport helper
 void physics_teleport_body(b2Body* body, float x, float y);
+// Enable/disable a body (disables all its fixtures when false)
+void physics_set_body_enabled(b2Body* body, bool enabled);
+// Query if an axis-aligned box overlaps any fixture in the world, ignoring up to two bodies
+bool physics_overlap_aabb(float cx, float cy, float w, float h, b2Body* ignore_a, b2Body* ignore_b);
 
 // Expose gravity change, etc.
 void physics_set_gravity(float gx, float gy);
@@ -37,7 +51,10 @@ void physics_set_gravity(float gx, float gy);
 // Access underlying Box2D world for advanced setups (wheels/joints)
 struct b2World* physics_get_world(void);
 
+// Thread-safety helpers: acquire before directly using Box2D and release after
+void physics_lock(void);
+void physics_unlock(void);
+
 #ifdef __cplusplus
 }
 #endif
-

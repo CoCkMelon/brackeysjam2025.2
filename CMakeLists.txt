@@ -99,6 +99,12 @@ target_include_directories(game PRIVATE
   ${CMAKE_SOURCE_DIR}/src/obj
 )
 
+
+# Use tinyobjloader vendored with the engine
+if(ame_engine_SOURCE_DIR)
+  target_include_directories(game PRIVATE ${ame_engine_SOURCE_DIR}/third_party)
+endif()
+
 # Link with engine C API targets (avoid facade, but link libs it provides)
 set(_ame_targets
   SDL3::SDL3

@@ -1,0 +1,16 @@
+BasedOnStyle: Chromium
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+SpaceBeforeParens: ControlStatements
+AlwaysBreakTemplateDeclarations: Yes
+SortIncludes: true
+IncludeBlocks: Preserve
+Language: Cpp
+
