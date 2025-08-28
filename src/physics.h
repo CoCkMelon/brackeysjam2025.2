@@ -38,6 +38,26 @@ void physics_get_velocity(b2Body* body, float* vx, float* vy);
 bool physics_is_grounded(b2Body* body);
 // Configurable variant
 bool physics_is_grounded_ex(b2Body* body, float normal_threshold, float max_upward_velocity);
+// Detect if body is touching a wall via a sensor; out_dir will be -1 for wall on left, +1 for wall
+// on right
+bool physics_is_touching_wall(b2Body* body, int* out_dir);
+
+// Simple raycast result used by gameplay helpers
+typedef struct RaycastCallback {
+    bool hit;        // whether anything was hit
+    float x, y;      // hit point (world)
+    float nx, ny;    // surface normal
+    float fraction;  // ray fraction along [0,1]
+    b2Body* body;    // body that was hit (if any)
+} RaycastCallback;
+
+// Cast a ray in world space and return the closest solid hit (sensors are ignored)
+RaycastCallback physics_raycast(float x0, float y0, float x1, float y1);
+
+// Add a sensor rectangle fixture to a body (for feet or side sensors). Offset is relative to body
+// center.
+void physics_add_sensor_box(b2Body* body, float w, float h, float offset_x, float offset_y);
+
 // Teleport helper
 void physics_teleport_body(b2Body* body, float x, float y);
 // Enable/disable a body (disables all its fixtures when false)

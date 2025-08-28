@@ -78,29 +78,30 @@ void car_init(Car* c) {
     c->cfg.body_w = 40.0f;
     c->cfg.body_h = 16.0f;
     c->cfg.wheel_radius = 6.0f;
-    c->cfg.axle_offset_x = 12.0f;
+    c->cfg.axle_offset_x_b = 10.0f;
+    c->cfg.axle_offset_x_f = 12.0f;
     c->cfg.suspension_hz = 4.0f;
     c->cfg.suspension_damping = 0.7f;
     // Increase motor parameters to ensure visible wheel spin and movement
     c->cfg.motor_speed = 500.0f;      // rad/s
     c->cfg.motor_torque = 200000.0f;  // stronger torque
-    c->cfg.jump_impulse = 1200000.0f;
+    c->cfg.jump_impulse = 120000.0f;
     c->cfg.boost_mul = 5.0f;
     c->cfg.fly_impulse = 12000.0f;
     c->cfg.gyro_torque = 4000000.0f;
 
     // Temporarly enable abilities here
     g_abilities.car_boost = true;
-    g_abilities.car_fly = true;
+    // g_abilities.car_fly = true;
     g_abilities.car_jump = true;
 
     // Try to load texture files via executable-relative and CWD; log only once on failure
-    c->tex_body = load_texture_from_file("assets/car_body.png");
+    c->tex_body = load_texture_from_file("assets/CarForBrackeyJam.png");
     if (c->tex_body == 0) {
         SDL_Log("Using fallback color texture for car body");
         c->tex_body = make_color_tex(60, 160, 255);
     }
-    c->tex_wheel = load_texture_from_file("assets/wheel.png");
+    c->tex_wheel = load_texture_from_file("assets/CarWheelForBrackeysJam.png");
     if (c->tex_wheel == 0) {
         SDL_Log("Using fallback color texture for car wheel");
         c->tex_wheel = make_color_tex(30, 30, 30);
@@ -131,9 +132,9 @@ void car_init(Car* c) {
         float wheelY = base_y + c->cfg.wheel_radius;
         b2BodyDef bd;
         bd.type = b2_dynamicBody;
-        bd.position.Set(base_x - c->cfg.axle_offset_x, wheelY);
+        bd.position.Set(base_x - c->cfg.axle_offset_x_b, wheelY);
         c->wheel_b = w->CreateBody(&bd);
-        bd.position.Set(base_x + c->cfg.axle_offset_x, wheelY);
+        bd.position.Set(base_x + c->cfg.axle_offset_x_f, wheelY);
         c->wheel_f = w->CreateBody(&bd);
         b2CircleShape wheel;
         wheel.m_radius = c->cfg.wheel_radius;
@@ -264,10 +265,10 @@ void car_set_position(Car* c, float x, float y) {
         physics_teleport_body(c->body, x, y + c->cfg.wheel_radius + c->cfg.body_h * 0.5f);
         // Keep wheels roughly aligned with body height so suspension settles quickly
         if (c->wheel_b) {
-            physics_teleport_body(c->wheel_b, x - c->cfg.axle_offset_x, y + c->cfg.wheel_radius);
+            physics_teleport_body(c->wheel_b, x - c->cfg.axle_offset_x_b, y + c->cfg.wheel_radius);
         }
         if (c->wheel_f) {
-            physics_teleport_body(c->wheel_f, x + c->cfg.axle_offset_x, y + c->cfg.wheel_radius);
+            physics_teleport_body(c->wheel_f, x + c->cfg.axle_offset_x_f, y + c->cfg.wheel_radius);
         }
         physics_unlock();
         c->pending_teleport = 0;

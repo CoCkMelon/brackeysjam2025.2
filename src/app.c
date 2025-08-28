@@ -475,11 +475,10 @@ int game_app_iterate(void* appstate) {
     }
 
     // Sync active audio sources
-    AmeAudioSourceRef arefs[4] = {{&g_music, g_music_id},
+    AmeAudioSourceRef arefs[3] = {{&g_music, g_music_id},
                                   {&g_car_rear_audio, g_car_rear_audio_id},
-                                  {&g_car_front_audio, g_car_front_audio_id},
-                                  {&g_ball_audio, g_ball_audio_id}};
-    ame_audio_sync_sources_refs(arefs, 4);
+                                  {&g_car_front_audio, g_car_front_audio_id}};
+    ame_audio_sync_sources_refs(arefs, 3);
 
     // Update triggers (AABB overlap only)
     float hx, hy, cx, cy;

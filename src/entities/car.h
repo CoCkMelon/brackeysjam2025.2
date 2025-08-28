@@ -15,7 +15,8 @@ typedef struct {
     float body_w, body_h;
     // Wheel config
     float wheel_radius;
-    float axle_offset_x;  // +/- from body center
+    float axle_offset_x_b;  // +/- from body center
+    float axle_offset_x_f;  // +/- from body center
     float suspension_hz;
     float suspension_damping;
     float motor_speed;   // base rad/s

@@ -121,6 +121,15 @@ void human_init(Human* h) {
     h->w = (float)fw;
     h->h = (float)fh;
     h->body = physics_create_dynamic_box(120, 120, h->w, h->h, 1.0f, 0.4f);
+    h->x_control_lock = 0.0f;
+    // Add a small foot sensor slightly below the body to detect ground and walls via contacts
+    if (h->body) {
+        float sensor_w = h->w * 0.8f;
+        float sensor_h = 2.0f;
+        float offset_x = 0.0f;
+        float offset_y = -h->h * 0.5f - 1.0f;
+        physics_add_sensor_box(h->body, sensor_w, sensor_h, offset_x, offset_y);
+    }
 }
 
 void human_shutdown(Human* h) {
@@ -137,10 +146,36 @@ void human_fixed(Human* h, float dt) {
     int dir = input_move_dir();
     float target_vx = 50.0f * (float)dir;
     bool grounded = physics_is_grounded(h->body);
-    if (grounded && input_jump_edge()) {
-        physics_apply_impulse(h->body, 0.0f, 100.0f);
+    // Decrease temporary horizontal control lock (after wall-jump)
+    if (h->x_control_lock > 0.0f) {
+        h->x_control_lock -= dt;
+        if (h->x_control_lock < 0.0f)
+            h->x_control_lock = 0.0f;
     }
-    physics_set_velocity_x(h->body, target_vx);
+    // Apply desired horizontal velocity only if not in control lock
+    if (h->x_control_lock <= 0.0f) {
+        physics_set_velocity_x(h->body, target_vx);
+    }
+    if (input_jump_edge()) {
+        if (grounded) {
+            physics_apply_impulse(h->body, 0.0f, 14000.0f);
+        } else {
+            int wall_dir = 0;
+            if (physics_is_touching_wall(h->body, &wall_dir) && wall_dir != 0) {
+                // Wall jump: set horizontal velocity away from wall and add vertical impulse
+                float vx, vy;
+                physics_get_velocity(h->body, &vx, &vy);
+                vx = -120.0f * (float)wall_dir +
+                     target_vx / 2;  // Fixed: Invert direction to push away from wall
+                physics_set_velocity(h->body, vx, vy);
+                float iy = 12000.0f;
+                physics_apply_impulse(h->body, 0.0f, iy);
+                h->x_control_lock = 0.3f;  // ~300ms to preserve horizontal kick
+            } else {
+                SDL_Log("jump not grounded");
+            }
+        }
+    }
 
     // Animation selection using centralized config
     if (!grounded) {

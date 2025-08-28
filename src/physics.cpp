@@ -3,8 +3,10 @@
 #include <box2d/box2d.h>
 #include <stdlib.h>
 #include <atomic>
+#include <cfloat>
 #include <cmath>
 #include <vector>
+#include "ame/physics.h"
 
 struct FixtureUserData {
     bool is_ground;
@@ -103,7 +105,13 @@ void physics_create_static_box(float x, float y, float w, float h, float frictio
     b2FixtureDef fd;
     fd.shape = &sh;
     fd.friction = friction;
-    b->CreateFixture(&fd);
+    b2Fixture* fx = b->CreateFixture(&fd);
+#if defined(b2_api_H)
+    FixtureUserData* ud = new FixtureUserData{true, false};
+    b2FixtureUserData fud;
+    fud.pointer = reinterpret_cast<uintptr_t>(ud);
+    fx->SetUserData(fud);
+#endif
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -121,7 +129,13 @@ void physics_create_static_circle(float x, float y, float r, float friction) {
     b2FixtureDef fd;
     fd.shape = &sh;
     fd.friction = friction;
-    b->CreateFixture(&fd);
+    b2Fixture* fx = b->CreateFixture(&fd);
+#if defined(b2_api_H)
+    FixtureUserData* ud = new FixtureUserData{true, false};
+    b2FixtureUserData fud;
+    fud.pointer = reinterpret_cast<uintptr_t>(ud);
+    fx->SetUserData(fud);
+#endif
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -137,7 +151,13 @@ void physics_create_static_edge(float x1, float y1, float x2, float y2, float fr
     b2FixtureDef fd;
     fd.shape = &sh;
     fd.friction = friction;
-    b->CreateFixture(&fd);
+    b2Fixture* fx = b->CreateFixture(&fd);
+#if defined(b2_api_H)
+    FixtureUserData* ud = new FixtureUserData{true, false};
+    b2FixtureUserData fud;
+    fud.pointer = reinterpret_cast<uintptr_t>(ud);
+    fx->SetUserData(fud);
+#endif
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -218,7 +238,13 @@ void physics_create_static_mesh_triangles(const float* pos, int vertex_count, fl
         b2FixtureDef fd;
         fd.shape = &sh;
         fd.friction = friction;
-        body->CreateFixture(&fd);
+        b2Fixture* fx = body->CreateFixture(&fd);
+#if defined(b2_api_H)
+        FixtureUserData* ud = new FixtureUserData{true, false};
+        b2FixtureUserData fud;
+        fud.pointer = reinterpret_cast<uintptr_t>(ud);
+        fx->SetUserData(fud);
+#endif
     }
     SDL_UnlockMutex(g_world_mtx);
 }
@@ -311,6 +337,8 @@ bool physics_is_grounded_ex(b2Body* body, float normal_threshold, float max_upwa
         b2WorldManifold wm;
         c->GetWorldManifold(&wm);
         b2Vec2 n = wm.normal;
+        if (my == b)
+            n = -n;  // make normal point toward me
         if (n.y > normal_threshold) {
             SDL_UnlockMutex(g_world_mtx);
             return true;
@@ -321,7 +349,48 @@ bool physics_is_grounded_ex(b2Body* body, float normal_threshold, float max_upwa
 }
 
 bool physics_is_grounded(b2Body* body) {
-    return physics_is_grounded_ex(body, 0.5f, 0.0f);
+    if (!body)
+        return false;
+    // Use three short downward rays from the bottom of the body
+    SDL_LockMutex(g_world_mtx);
+    const float player_size = 10.0f;
+    const float px = body->GetTransform().p.x;
+    const float py = body->GetTransform().p.y;
+    const float half = player_size * 0.5f;
+    const float y0 = py - half - 1.0f;
+    const float y1 = py - half - 12.0f;  // Y-up: cast downward from bottom of player
+    const float ox[3] = {-half + 2.0f, 0.0f, half - 2.0f};
+    struct LocalCB : public b2RayCastCallback {
+        bool hit = false;
+        b2Body* me = nullptr;
+        float ReportFixture(b2Fixture* fixture,
+                            const b2Vec2& p,
+                            const b2Vec2& n,
+                            float fr) override {
+            (void)p;
+            (void)n;
+            if (fixture->IsSensor())
+                return -1.0f;
+            b2Body* b = fixture->GetBody();
+            if (b == me)
+                return -1.0f;
+            if (b->GetType() == b2_dynamicBody)
+                return -1.0f;
+            hit = true;
+            return fr;
+        }
+    } cb;
+    cb.me = body;
+    for (int i = 0; i < 3; ++i) {
+        cb.hit = false;
+        g_world->RayCast(&cb, b2Vec2(px + ox[i], y0), b2Vec2(px + ox[i], y1));
+        if (cb.hit) {
+            SDL_UnlockMutex(g_world_mtx);
+            return true;
+        }
+    }
+    SDL_UnlockMutex(g_world_mtx);
+    return false;
 }
 
 void physics_teleport_body(b2Body* body, float x, float y) {
@@ -348,6 +417,138 @@ void physics_set_body_enabled(b2Body* body, bool enabled) {
     SDL_LockMutex(g_world_mtx);
     body->SetEnabled(enabled);
     SDL_UnlockMutex(g_world_mtx);
+}
+
+bool physics_is_touching_wall(b2Body* body, int* out_dir) {
+    if (out_dir)
+        *out_dir = 0;
+    if (!body)
+        return false;
+
+    SDL_LockMutex(g_world_mtx);
+
+    // Build combined AABB of this body
+    b2AABB aabb;
+    aabb.lowerBound = b2Vec2(FLT_MAX, FLT_MAX);
+    aabb.upperBound = b2Vec2(-FLT_MAX, -FLT_MAX);
+
+    for (b2Fixture* f = body->GetFixtureList(); f; f = f->GetNext()) {
+#if defined(b2_api_H)
+        int childCount = f->GetShape()->GetChildCount();
+#else
+        int childCount = 1;
+#endif
+        for (int i = 0; i < childCount; ++i) {
+#if defined(b2_api_H)
+            b2AABB fa = f->GetAABB(i);
+#else
+            b2AABB fa;
+            fa.lowerBound = b2Vec2(0, 0);
+            fa.upperBound = b2Vec2(0, 0);
+#endif
+            aabb.lowerBound.x = fminf(aabb.lowerBound.x, fa.lowerBound.x);
+            aabb.lowerBound.y = fminf(aabb.lowerBound.y, fa.lowerBound.y);
+            aabb.upperBound.x = fmaxf(aabb.upperBound.x, fa.upperBound.x);
+            aabb.upperBound.y = fmaxf(aabb.upperBound.y, fa.upperBound.y);
+        }
+    }
+
+    float cx = (aabb.lowerBound.x + aabb.upperBound.x) * 0.5f;
+    float cy = (aabb.lowerBound.y + aabb.upperBound.y) * 0.5f;
+    float hx = (aabb.upperBound.x - aabb.lowerBound.x) * 0.5f;
+    float hy = (aabb.upperBound.y - aabb.lowerBound.y) * 0.5f;
+
+    // Short raycast distance to check for immediate adjacency
+    const float check_dist = 0.3f;
+
+    // Sample points at different heights
+    float y_samples[3] = {cy - hy * 0.4f, cy, cy + hy * 0.4f};
+
+    struct LocalCB : public b2RayCastCallback {
+        bool hit = false;
+        b2Body* me = nullptr;
+        float ReportFixture(b2Fixture* fixture,
+                            const b2Vec2& p,
+                            const b2Vec2& n,
+                            float fr) override {
+            (void)p;
+            (void)n;
+            if (fixture->IsSensor())
+                return -1.0f;
+            b2Body* b = fixture->GetBody();
+            if (b == me)
+                return -1.0f;
+            if (b->GetType() == b2_dynamicBody)
+                return -1.0f;  // ignore dynamic bodies
+            hit = true;
+            return fr;  // return the fraction to get the closest hit
+        }
+    } cb;
+    cb.me = body;
+
+    // Check right side - cast from body edge outward
+    for (int i = 0; i < 3; ++i) {
+        cb.hit = false;
+        g_world->RayCast(&cb, b2Vec2(aabb.upperBound.x, y_samples[i]),
+                         b2Vec2(aabb.upperBound.x + check_dist, y_samples[i]));
+        if (cb.hit) {
+            if (out_dir)
+                *out_dir = 1;  // wall is to the right
+            SDL_UnlockMutex(g_world_mtx);
+            return true;
+        }
+    }
+
+    // Check left side - cast from body edge outward
+    for (int i = 0; i < 3; ++i) {
+        cb.hit = false;
+        g_world->RayCast(&cb, b2Vec2(aabb.lowerBound.x, y_samples[i]),
+                         b2Vec2(aabb.lowerBound.x - check_dist, y_samples[i]));
+        if (cb.hit) {
+            if (out_dir)
+                *out_dir = -1;  // wall is to the left
+            SDL_UnlockMutex(g_world_mtx);
+            return true;
+        }
+    }
+
+    // Fallback: Check actual contacts for wall detection
+    for (b2ContactEdge* ce = body->GetContactList(); ce; ce = ce->next) {
+        b2Contact* c = ce->contact;
+        if (!c->IsTouching())
+            continue;
+
+        b2Fixture* fixtureA = c->GetFixtureA();
+        b2Fixture* fixtureB = c->GetFixtureB();
+        b2Body* otherBody =
+            (fixtureA->GetBody() == body) ? fixtureB->GetBody() : fixtureA->GetBody();
+
+        // Skip if other body is dynamic (not a wall)
+        if (otherBody->GetType() == b2_dynamicBody)
+            continue;
+
+        // Get contact normal
+        b2WorldManifold wm;
+        c->GetWorldManifold(&wm);
+        b2Vec2 normal = wm.normal;
+
+        // Make sure normal points toward our body
+        if (fixtureA->GetBody() != body) {
+            normal = -normal;
+        }
+
+        // Check if this is a vertical wall contact (horizontal normal)
+        const float horizontal_threshold = 0.7f;
+        if (fabsf(normal.x) > horizontal_threshold) {
+            if (out_dir)
+                *out_dir = (normal.x > 0.0f) ? 1 : -1;
+            SDL_UnlockMutex(g_world_mtx);
+            return true;
+        }
+    }
+
+    SDL_UnlockMutex(g_world_mtx);
+    return false;
 }
 
 struct OverlapQueryCB : public b2QueryCallback {
@@ -387,6 +588,75 @@ bool physics_overlap_aabb(float cx,
 
 b2World* physics_get_world(void) {
     return g_world;
+}
+
+void physics_add_sensor_box(b2Body* body, float w, float h, float offset_x, float offset_y) {
+    if (!body)
+        return;
+    SDL_LockMutex(g_world_mtx);
+    b2PolygonShape sh;
+    sh.SetAsBox(w * 0.5f, h * 0.5f, b2Vec2(offset_x, offset_y), 0.0f);
+    b2FixtureDef fd;
+    fd.shape = &sh;
+    fd.isSensor = true;
+    fd.density = 0.0f;
+    b2Fixture* fx = body->CreateFixture(&fd);
+#if defined(b2_api_H)
+    FixtureUserData* ud = new FixtureUserData{false, true};
+    b2FixtureUserData fud;
+    fud.pointer = reinterpret_cast<uintptr_t>(ud);
+    fx->SetUserData(fud);
+#endif
+    SDL_UnlockMutex(g_world_mtx);
+}
+
+// Internal raycast callback to capture closest non-sensor hit
+struct ClosestRayCastCB : public b2RayCastCallback {
+    bool hit = false;
+    float fraction_min = 1e9f;
+    b2Vec2 point{};
+    b2Vec2 normal{};
+    b2Body* body = nullptr;
+    float ReportFixture(b2Fixture* fixture,
+                        const b2Vec2& point_,
+                        const b2Vec2& normal_,
+                        float fraction) override {
+        if (fixture->IsSensor()) {
+            return -1.0f;  // ignore sensors completely
+        }
+        if (fraction < fraction_min) {
+            fraction_min = fraction;
+            hit = true;
+            point = point_;
+            normal = normal_;
+            body = fixture->GetBody();
+        }
+        return fraction;  // clip the ray to this point and continue to find closer
+    }
+};
+
+RaycastCallback physics_raycast(float x0, float y0, float x1, float y1) {
+    RaycastCallback out{};
+    out.hit = false;
+    out.x = out.y = out.nx = out.ny = 0.0f;
+    out.fraction = 0.0f;
+    out.body = nullptr;
+    if (!g_world)
+        return out;
+    SDL_LockMutex(g_world_mtx);
+    ClosestRayCastCB cb;
+    g_world->RayCast(&cb, b2Vec2(x0, y0), b2Vec2(x1, y1));
+    if (cb.hit) {
+        out.hit = true;
+        out.x = cb.point.x;
+        out.y = cb.point.y;
+        out.nx = cb.normal.x;
+        out.ny = cb.normal.y;
+        out.fraction = cb.fraction_min;
+        out.body = cb.body;
+    }
+    SDL_UnlockMutex(g_world_mtx);
+    return out;
 }
 
 void physics_lock(void) {
