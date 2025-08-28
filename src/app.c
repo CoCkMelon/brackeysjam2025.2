@@ -15,6 +15,7 @@
 #include "abilities.h"
 #include "ame_dialogue.h"
 #include <math.h>
+#include "ame/audio.h"
 
 static SDL_Window* g_window = NULL;
 static SDL_GLContext g_gl = NULL;
@@ -33,6 +34,15 @@ static ControlMode g_mode = CONTROL_HUMAN;
 
 static Human g_human;
 static Car g_car;
+
+// Audio
+static AmeAudioSource g_music;
+static AmeAudioSource g_car_audio;
+static AmeAudioSource g_ball_audio;
+static uint64_t g_music_id = 1, g_car_audio_id = 2, g_ball_audio_id = 3;
+
+// Simple ball for spatial audio demo
+static b2Body* g_ball_body = NULL;
 
 static SDL_Thread* g_logic_thread = NULL;
 static atomic_bool g_logic_running = false;
@@ -126,6 +136,21 @@ int game_app_init(void){
   if(!input_init()) return 0;
   if(!physics_init()) return 0; // physics thread (1000Hz)
   if(!pipeline_init()) return 0;
+  if(!ame_audio_init(48000)) return 0;
+
+  // Music (looping)
+  if(!ame_audio_source_load_opus_file(&g_music, "assets/brackeys_platformer_assets/music/time_for_adventure.opus", true)){
+    SDL_Log("music load failed");
+  }
+  g_music.gain = 0.35f; g_music.pan = 0.0f; g_music.playing = true;
+
+  // Car engine hum (non-spatial)
+  ame_audio_source_init_sigmoid(&g_car_audio, 80.0f, 4.0f, 0.20f);
+  g_car_audio.pan = 0.0f;
+
+  // Ball rolling tone (spatial by pan)
+  ame_audio_source_init_sigmoid(&g_ball_audio, 220.0f, 6.0f, 0.12f);
+  g_ball_audio.pan = 0.0f;
   abilities_init();
   triggers_init();
 
@@ -148,6 +173,10 @@ int game_app_init(void){
 
   human_init(&g_human);
   car_init(&g_car);
+
+  // Create a small "ball" as a dynamic box to demonstrate spatial audio
+  g_ball_body = physics_create_dynamic_box(200.0f, 150.0f, 6.0f, 6.0f, 0.5f, 0.6f);
+  physics_set_velocity(g_ball_body, 30.0f, 0.0f);
   car_set_position(&g_car, 150.0f, 120.0f);
   human_set_position(&g_human, 120.0f, 120.0f);
 
@@ -195,6 +224,23 @@ int game_app_iterate(void *appstate){
   if(g_mode == CONTROL_CAR){ car_update(&g_car, dt); }
   else { human_update(&g_human, dt); }
 
+  // Update ball panning based on screen position relative to camera
+  float bx=0, by=0; physics_get_position(g_ball_body, &bx, &by);
+  // Map horizontal offset to pan in [-1,1] using viewport width and zoom
+  float half_w = (float)g_w * 0.5f / g_cam.zoom;
+  float pan = 0.0f; // left negative, right positive
+  pan = (bx - g_cam.x - half_w) / half_w; // center at camera middle
+  if(pan < -1.0f) pan = -1.0f; if(pan > 1.0f) pan = 1.0f;
+  g_ball_audio.pan = pan;
+
+  // Sync active audio sources
+  AmeAudioSourceRef arefs[3] = {
+    { &g_music, g_music_id },
+    { &g_car_audio, g_car_audio_id },
+    { &g_ball_audio, g_ball_audio_id }
+  };
+  ame_audio_sync_sources_refs(arefs, 3);
+
   // Update triggers (AABB overlap only)
   float hx,hy,cx,cy; human_get_position(&g_human,&hx,&hy); car_get_position(&g_car,&cx,&cy);
   triggers_update(hx,hy, g_human.w, g_human.h, cx,cy, g_car.cfg.body_w, g_car.cfg.body_h);
@@ -225,6 +271,7 @@ void game_app_quit(void *appstate, int result){
   pipeline_shutdown();
   physics_shutdown();
   input_shutdown();
+  ame_audio_shutdown();
   shutdown_gl();
   SDL_Quit();
 }
