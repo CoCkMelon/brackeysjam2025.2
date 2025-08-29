@@ -80,7 +80,7 @@ void car_init(Car* c) {
     c->cfg.body_w = 35.0f;
     c->cfg.body_h = 20.0f;
     c->cfg.wheel_radius = 6.0f;
-    c->cfg.axle_offset_x_b = 10.0f;
+    c->cfg.axle_offset_x_b = 8.0f;
     c->cfg.axle_offset_x_f = 12.0f;
     c->cfg.suspension_hz = 4.0f;
     c->cfg.suspension_damping = 0.7f;
@@ -154,7 +154,7 @@ void car_init(Car* c) {
         b2Vec2 axis(0.0f, 1.0f);
         jd.collideConnected = false;
         jd.enableLimit = true;
-        jd.lowerTranslation = -50.0f;
+        jd.lowerTranslation = -5.0f;
         jd.upperTranslation = 20.0f;
 
         // Rear wheel suspension + motor

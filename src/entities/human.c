@@ -37,9 +37,8 @@ static int load_player_frames(GLuint* out_frames,
                               int* out_w,
                               int* out_h,
                               const HumanAnimConfig* cfg) {
-    const char* candidates[] = {"assets/player.png",
-                                "examples/kenney_pixel-platformer/Tilemap/tilemap-characters.png",
-                                NULL};
+    // Load the combined spritesheet defined in the centralized config
+    const char* candidates[] = {HUMAN_SPRITESHEET_PATH, NULL};
     SDL_Surface* surf = NULL;
     for (int i = 0; candidates[i]; ++i) {
         surf = IMG_Load(candidates[i]);
@@ -47,7 +46,7 @@ static int load_player_frames(GLuint* out_frames,
             break;
     }
     if (!surf) {
-        SDL_Log("Failed to load player spritesheet");
+        SDL_Log("Failed to load player spritesheet: %s", HUMAN_SPRITESHEET_PATH);
         return 0;
     }
     SDL_Surface* conv = SDL_ConvertSurface(surf, SDL_PIXELFORMAT_RGBA32);
@@ -56,15 +55,15 @@ static int load_player_frames(GLuint* out_frames,
         SDL_Log("ConvertSurface failed: %s", SDL_GetError());
         return 0;
     }
-    int tile_w = cfg ? cfg->tile_w : 16;
-    int tile_h = cfg ? cfg->tile_h : 16;
-    int row = cfg ? cfg->row : 0;
+    int tile_w = cfg ? cfg->tile_w : HUMAN_TILE_W;
+    int tile_h = cfg ? cfg->tile_h : HUMAN_TILE_H;
+    int row = cfg ? cfg->row : HUMAN_SPRITESHEET_ROW;
     if (tile_w <= 0)
-        tile_w = 16;
+        tile_w = HUMAN_TILE_W;
     if (tile_h <= 0)
-        tile_h = 16;
+        tile_h = HUMAN_TILE_H;
     if (row < 0)
-        row = 0;
+        row = HUMAN_SPRITESHEET_ROW;
     int cols = conv->w / tile_w;
     int frames = cols < max_frames ? cols : max_frames;
     for (int i = 0; i < frames; i++) {
@@ -93,22 +92,19 @@ static int load_player_frames(GLuint* out_frames,
 void human_init(Human* h) {
     if (!h)
         return;
-    // Default animation controls centralized here
-    h->cfg.tile_w = 16;
-    h->cfg.tile_h = 16;
-    h->cfg.row = 0;
-    h->cfg.idle = 0;
-    h->cfg.walk[0] = 1;
-    h->cfg.walk[1] = 2;
-    h->cfg.walk_count = 2;
-    h->cfg.jump = 3;
-    h->cfg.walk_fps = 10.0f;
+    // Default animation controls centralized in human.h
+    h->cfg = human_default_anim_config();
 
     h->hidden = 0;
     h->frame_count = 0;
-    h->current_frame = 0;
+    h->current_frame = h->cfg.idle;
     h->anim_time = 0.0f;
-    int fw = 16, fh = 16;
+    h->facing = 1;         // face right initially
+    h->was_grounded = true;
+    h->jump_anim_playing = 0;
+    h->jump_anim_time = 0.0f;
+
+    int fw = HUMAN_TILE_W, fh = HUMAN_TILE_H;
     h->frame_count = load_player_frames(h->frames, 32, &fw, &fh, &h->cfg);
     if (h->frame_count <= 0) {
         unsigned char px[16 * 16 * 4];
@@ -149,6 +145,11 @@ void human_fixed(Human* h, float dt) {
     int dir = input_move_dir();
     float target_vx = 50.0f * (float)dir;
     bool grounded = physics_is_grounded(h->body);
+
+    // Update facing when input present
+    if (dir > 0) h->facing = 1;
+    else if (dir < 0) h->facing = -1;
+
     // Decrease temporary horizontal control lock (after wall-jump)
     if (h->x_control_lock > 0.0f) {
         h->x_control_lock -= dt;
@@ -160,16 +161,20 @@ void human_fixed(Human* h, float dt) {
         physics_set_velocity_x(h->body, target_vx);
     }
     if (input_jump_edge()) {
+        // Start one-shot 2-frame jump takeoff animation immediately
+        h->jump_anim_playing = 1;
+        h->jump_anim_time = 0.0f;
+        h->current_frame = (h->cfg.jump_first < h->frame_count ? h->cfg.jump_first : h->cfg.idle);
         if (grounded) {
             physics_apply_impulse(h->body, 0.0f, 14000.0f);
+            grounded = false; // treat as airborne now for anim purposes
         } else {
             int wall_dir = 0;
             if (physics_is_touching_wall(h->body, &wall_dir) && wall_dir != 0) {
                 // Wall jump: set horizontal velocity away from wall and add vertical impulse
                 float vx, vy;
                 physics_get_velocity(h->body, &vx, &vy);
-                vx = -120.0f * (float)wall_dir +
-                     target_vx / 2;  // Fixed: Invert direction to push away from wall
+                vx = -120.0f * (float)wall_dir + target_vx / 2; // push away from wall
                 physics_set_velocity(h->body, vx, vy);
                 float iy = 12000.0f;
                 physics_apply_impulse(h->body, 0.0f, iy);
@@ -182,8 +187,33 @@ void human_fixed(Human* h, float dt) {
 
     // Animation selection using centralized config
     if (!grounded) {
-        h->current_frame = (h->cfg.jump < h->frame_count ? h->cfg.jump : 0);
+        // If playing takeoff, advance through exactly 2 frames at jump_fps then hold first jump frame
+        if (h->jump_anim_playing) {
+            h->jump_anim_time += dt;
+            int frame_i = (int)(h->jump_anim_time * h->cfg.jump_fps); // 0,1,2,...
+            if (frame_i <= 0)
+                frame_i = 0;
+            if (frame_i >= 2) {
+                // Finished the two-frame takeoff
+                h->jump_anim_playing = 0;
+                frame_i = 0; // fall-through to holding first frame below
+            }
+            int idx = h->cfg.jump_first + (frame_i > 1 ? 1 : frame_i);
+            if (idx >= 0 && idx < h->frame_count)
+                h->current_frame = idx;
+            else
+                h->current_frame = h->cfg.idle;
+        } else {
+            // Hold first jump frame while airborne
+            h->current_frame = (h->cfg.jump_first < h->frame_count ? h->cfg.jump_first : h->cfg.idle);
+        }
     } else if (dir != 0 && h->cfg.walk_count > 0) {
+        // If just landed, restart walk cycle and stop any residual jump takeoff
+        if (!h->was_grounded) {
+            h->anim_time = 0.0f;
+            h->jump_anim_playing = 0;
+            h->jump_anim_time = 0.0f;
+        }
         h->anim_time += dt;
         int cycle = (int)(h->anim_time * h->cfg.walk_fps) % h->cfg.walk_count;
         int idx = h->cfg.walk[cycle];
@@ -192,8 +222,14 @@ void human_fixed(Human* h, float dt) {
         else
             h->current_frame = h->cfg.idle;
     } else {
+        // Idle when grounded and no input; stop any residual jump takeoff
         h->current_frame = (h->cfg.idle < h->frame_count ? h->cfg.idle : 0);
+        h->anim_time = 0.0f;
+        h->jump_anim_playing = 0;
+        h->jump_anim_time = 0.0f;
     }
+
+    h->was_grounded = grounded;
 }
 
 void human_update(Human* h, float dt) {
@@ -208,7 +244,7 @@ void human_render(const Human* h) {
     physics_get_position(h->body, &x, &y);
     GLuint tex = h->frames[h->current_frame % (h->frame_count > 0 ? h->frame_count : 1)];
     // Human currently unrotated; pass 0 angle but use rotated sprite API
-    pipeline_sprite_quad_rot(x, y, h->w, h->h, 0.0f, tex, 1, 1, 1, 1);
+    pipeline_sprite_quad_rot(x, y, h->w * (float)h->facing, h->h, 0.0f, tex, 1, 1, 1, 1);
 }
 
 void human_set_position(Human* h, float x, float y) {

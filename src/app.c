@@ -147,12 +147,13 @@ static int logic_thread_main(void* ud) {
 static void update_switch_logic(void) {
     if (input_pressed_switch()) {
         float hx, hy, cx, cy;
+        const float switch_threshold = 64;
         human_get_position(&g_human, &hx, &hy);
         car_get_position(&g_car, &cx, &cy);
         float dx = hx - cx, dy = hy - cy;
         float d2 = dx * dx + dy * dy;
-        SDL_Log("Switch pressed: distance=%.2f, threshold=%.2f", sqrtf(d2), 32.0f);
-        if (d2 < 32.0f * 32.0f || g_mode == CONTROL_CAR) {
+        SDL_Log("Switch pressed: distance=%.2f, threshold=%.2f", sqrtf(d2), switch_threshold);
+        if (d2 < switch_threshold*switch_threshold || g_mode == CONTROL_CAR) {
             if (g_mode == CONTROL_HUMAN) {
                 SDL_Log("Switching from HUMAN to CAR");
                 human_hide(&g_human, true);
@@ -209,7 +210,7 @@ int game_app_init(void) {
 
     // Music (looping)
     if (!ame_audio_source_load_opus_file(
-            &g_music, "assets/brackeys_platformer_assets/music/time_for_adventure.opus", true)) {
+            &g_music, "assets/shon.opus", true)) {
         SDL_Log("music load failed");
     }
     g_music.gain = 0.35f;
@@ -217,11 +218,11 @@ int game_app_init(void) {
     g_music.playing = true;
 
     // Car engine hums (non-spatial)
-    // Lower shape parameter (1.5 instead of 4.0) for smoother, less distorted motor sound
-    ame_audio_source_init_sigmoid(&g_car_rear_audio, 80.0f, 1.5f, 0.15f);
+    // 8-bit style: Higher shape (10-15) for square-like waves, lower frequencies for motor rumble
+    ame_audio_source_init_sigmoid(&g_car_rear_audio, 55.0f, 12.0f, 0.15f);
     g_car_rear_audio.pan = 0.0f;
-    // Front wheel motor - slightly different parameters for variation
-    ame_audio_source_init_sigmoid(&g_car_front_audio, 95.0f, 1.2f, 0.12f);
+    // Front wheel motor - slightly different for layering effect
+    ame_audio_source_init_sigmoid(&g_car_front_audio, 65.0f, 10.0f, 0.12f);
     g_car_front_audio.pan = 0.0f;
 
     // Ball rolling tone (spatial by pan)
@@ -405,7 +406,7 @@ int game_app_iterate(void* appstate) {
             float wr = rear_w / max_w;
             if (wr > 1.0f)
                 wr = 1.0f;
-            r_freq = 60.0f + wr * 140.0f;
+            r_freq = 0.0f + wr * 100.0f;
             r_gain = 0.10f + wr * 0.30f;
             g_car_rear_audio.playing = true;
         } else {
@@ -422,7 +423,7 @@ int game_app_iterate(void* appstate) {
             float wf = front_w / max_wf;
             if (wf > 1.0f)
                 wf = 1.0f;
-            f_freq = 60.0f + wf * 140.0f;
+            f_freq = 0.0f + wf * 100.0f;
             f_gain = 0.08f + wf * 0.25f;
             g_car_front_audio.playing = true;
         } else {
