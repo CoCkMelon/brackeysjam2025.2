@@ -12,6 +12,7 @@ static _Atomic int a_shift = 0;
 static _Atomic int a_switch_e = 0, a_switch_ins = 0;
 static _Atomic int a_escape = 0;
 static _Atomic int a_num[10];  // 0..9
+static _Atomic int a_g = 0, a_m = 0, a_t = 0, a_r = 0;
 
 static _Atomic int edge_jump = 0;
 static _Atomic int edge_switch = 0;
@@ -21,6 +22,8 @@ static _Atomic int prev_space = 0;
 static _Atomic int prev_enter = 0;
 static _Atomic int prev_num[10];
 static _Atomic int prev_e = 0, prev_ins = 0;
+static _Atomic int edge_g = 0, edge_m = 0, edge_t = 0, edge_r = 0;
+static _Atomic int prev_g = 0, prev_m = 0, prev_t = 0, prev_r = 0;
 
 static void on_input(const struct ni_event* ev, void* ud) {
     (void)ud;
@@ -69,6 +72,18 @@ static void on_input(const struct ni_event* ev, void* ud) {
             break;
         case NI_KEY_ENTER:
             atomic_store(&a_enter, down);
+            break;
+        case NI_KEY_G:
+            atomic_store(&a_g, down);
+            break;
+        case NI_KEY_M:
+            atomic_store(&a_m, down);
+            break;
+        case NI_KEY_T:
+            atomic_store(&a_t, down);
+            break;
+        case NI_KEY_R:
+            atomic_store(&a_r, down);
             break;
         case NI_KEY_0:
             atomic_store(&a_num[0], down);
@@ -154,6 +169,11 @@ void input_update(void) {
     int pins = atomic_exchange(&prev_ins, ins);
     if (ins && !pins)
         atomic_store(&edge_switch, 1);
+
+    int g = atomic_load(&a_g); int pg = atomic_exchange(&prev_g, g); if (g && !pg) atomic_store(&edge_g, 1);
+    int m = atomic_load(&a_m); int pm = atomic_exchange(&prev_m, m); if (m && !pm) atomic_store(&edge_m, 1);
+    int t = atomic_load(&a_t); int pt = atomic_exchange(&prev_t, t); if (t && !pt) atomic_store(&edge_t, 1);
+    int r = atomic_load(&a_r); int pr = atomic_exchange(&prev_r, r); if (r && !pr) atomic_store(&edge_r, 1);
 }
 
 // Left/Right for human walking
@@ -200,3 +220,4 @@ bool input_choice_edge(int index_1_to_9) {
         return false;
     return atomic_exchange(&edge_num[index_1_to_9], 0) != 0;
 }
+

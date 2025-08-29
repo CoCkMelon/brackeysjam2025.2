@@ -6,11 +6,16 @@
 #include <string>
 #include <vector>
 #include "physics.h"
+#include "triggers.h"
+#include "gameplay.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
 static bool has_prefix(const std::string& s, const char* p) {
     return s.rfind(p, 0) == 0;
+}
+static bool has_tag(const std::string& s, const char* t) {
+    return s.find(t) != std::string::npos;
 }
 
 static std::string dirname_from_path(const char* path) {
@@ -67,17 +72,20 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
 
     for (const auto& sh : shapes) {
         std::string name = sh.name;
-        // Collect vertices referenced by this shape in order (use OBJ x and y for 2D)
-        std::vector<float> xs, ys;
+        // Collect vertices referenced by this shape in order (use OBJ x, y, and z)
+        std::vector<float> xs, ys, zs;
         xs.reserve(sh.mesh.indices.size());
         ys.reserve(sh.mesh.indices.size());
+        zs.reserve(sh.mesh.indices.size());
         float minx = 1e9f, miny = 1e9f, maxx = -1e9f, maxy = -1e9f;
         for (const auto& idx : sh.mesh.indices) {
             size_t vi = size_t(idx.vertex_index) * 3;
             float x = attrib.vertices[vi + 0];
             float y = attrib.vertices[vi + 1];
+            float z = attrib.vertices[vi + 2];
             xs.push_back(x);
             ys.push_back(y);
+            zs.push_back(z);
             if (x < minx)
                 minx = x;
             if (x > maxx)
@@ -86,6 +94,59 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
                 miny = y;
             if (y > maxy)
                 maxy = y;
+        }
+        if (has_prefix(name, "TriggerGrenade") || has_prefix(name, "TriggerRocket") ||
+            has_prefix(name, "TriggerTurretShot")) {
+            // Create a triggers AABB for this shape
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            float w = (maxx - minx);
+            float h = (maxy - miny);
+            Aabb box = {cx, cy, w, h};
+            // Allocate payload with center to pass to callback
+            GameplayTriggerUser* u = (GameplayTriggerUser*)malloc(sizeof(GameplayTriggerUser));
+            if (u) { u->x = cx; u->y = cy; }
+            // Not once: can keep firing when overlapped
+            triggers_add(name.c_str(), box, 0, gameplay_on_trigger, (void*)u);
+            continue;
+        }
+        if (has_prefix(name, "Mine")) {
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            spawn_mine(cx, cy);
+            continue;
+        }
+        if (has_prefix(name, "Turret")) {
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            spawn_turret(cx, cy);
+            continue;
+        }
+        if (has_prefix(name, "Spawn") || has_prefix(name, "SpawnPoint")) {
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            gameplay_add_spawn_point(cx, cy);
+            continue;
+        }
+        if (has_tag(name, "Saw") || has_tag(name, "Spike")) {
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            float w = (maxx - minx);
+            float h = (maxy - miny);
+            if (has_tag(name, "Spike")){
+                // Create spike collider from this shape's triangles with spike flag; keep visual mesh
+                if (xs.size() >= 3) {
+                    std::vector<float> tri;
+                    tri.reserve(xs.size() * 2);
+                    for (size_t i = 0; i < xs.size(); ++i) { tri.push_back(xs[i]); tri.push_back(ys[i]); }
+                    physics_create_static_mesh_triangles_tagged(tri.data(), (int)xs.size(), 0.8f, PHYS_FLAG_SPIKE);
+                }
+                // do not continue; allow visual geometry accumulation
+            } else {
+                float r = 0.5f * fminf(w, h);
+                gameplay_spawn_saw(cx, cy, r > 2.0f ? r : 6.0f);
+                continue; // saw uses sprite, not visual mesh
+            }
         }
         if (has_prefix(name, "BoxCollider")) {
             float cx = 0.5f * (minx + maxx);
@@ -136,13 +197,15 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             }
             continue;
         }
-        // Visual contribution with UVs
+        // Visual contribution with UVs (store xyz coordinates)
         for (const auto& idx : sh.mesh.indices) {
             size_t vi = size_t(idx.vertex_index) * 3;
             float x = attrib.vertices[vi + 0];
             float y = attrib.vertices[vi + 1];
+            float z = attrib.vertices[vi + 2];
             vis.push_back(x);
             vis.push_back(y);
+            vis.push_back(z);
             if (idx.texcoord_index >= 0) {
                 size_t ti = size_t(idx.texcoord_index) * 2;
                 float u = attrib.texcoords.size() > ti + 1 ? attrib.texcoords[ti + 0] : 0.0f;
@@ -188,8 +251,8 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
         float* pos = (float*)malloc(vis.size() * sizeof(float));
         memcpy(pos, vis.data(), vis.size() * sizeof(float));
         out_mesh->pos = pos;
-        out_mesh->count = (unsigned int)(vis.size() / 2);
-        if (uvs.size() == vis.size()) {
+        out_mesh->count = (unsigned int)(vis.size() / 3);  // xyz triplets
+        if (uvs.size() == vis.size() / 3 * 2) {  // uvs are still pairs, so vis.size()/3*2 pairs expected
             float* uv = (float*)malloc(uvs.size() * sizeof(float));
             memcpy(uv, uvs.data(), uvs.size() * sizeof(float));
             out_mesh->uv = uv;

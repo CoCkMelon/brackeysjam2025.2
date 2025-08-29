@@ -122,6 +122,9 @@ void human_init(Human* h) {
     h->h = (float)fh;
     h->body = physics_create_dynamic_box(120, 120, h->w, h->h, 1.0f, 0.4f);
     h->x_control_lock = 0.0f;
+    // Health defaults
+    h->health.max_hp = 100.0f;
+    h->health.hp = h->health.max_hp;
     // Add a small foot sensor slightly below the body to detect ground and walls via contacts
     if (h->body) {
         float sensor_w = h->w * 0.8f;
@@ -226,4 +229,16 @@ void human_hide(Human* h, bool hide) {
     h->hidden = hide ? 1 : 0;
     // Also disable physics body so hidden human doesn't collide or receive forces
     physics_set_body_enabled(h->body, !hide);
+}
+
+void human_apply_damage(Human* h, float dmg) {
+    if (!h)
+        return;
+    h->health.hp -= dmg;
+    if (h->health.hp < 0.0f)
+        h->health.hp = 0.0f;
+    SDL_Log("Human HP: %.1f / %.1f", h->health.hp, h->health.max_hp);
+    if (h->health.hp == 0.0f) {
+        SDL_Log("Human defeated");
+    }
 }

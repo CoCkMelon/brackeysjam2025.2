@@ -18,6 +18,7 @@
 #include "physics.h"
 #include "render/pipeline.h"
 #include "triggers.h"
+#include "gameplay.h"
 
 static SDL_Window* g_window = NULL;
 static SDL_GLContext g_gl = NULL;
@@ -132,6 +133,8 @@ static int logic_thread_main(void* ud) {
             } else {
                 human_fixed(&g_human, kFixedDt);
             }
+            // Gameplay fixed-step (weapons, timers)
+            gameplay_fixed(&g_human, &g_car, kFixedDt);
             acc -= kFixedDt;
             steps++;
         }
@@ -201,6 +204,8 @@ int game_app_init(void) {
         return 0;
     if (!ame_audio_init(48000))
         return 0;
+    if (!gameplay_init())
+        return 0;
 
     // Music (looping)
     if (!ame_audio_source_load_opus_file(
@@ -212,10 +217,11 @@ int game_app_init(void) {
     g_music.playing = true;
 
     // Car engine hums (non-spatial)
-    ame_audio_source_init_sigmoid(&g_car_rear_audio, 80.0f, 4.0f, 0.20f);
+    // Lower shape parameter (1.5 instead of 4.0) for smoother, less distorted motor sound
+    ame_audio_source_init_sigmoid(&g_car_rear_audio, 80.0f, 1.5f, 0.15f);
     g_car_rear_audio.pan = 0.0f;
-    // Front wheel motor
-    ame_audio_source_init_sigmoid(&g_car_front_audio, 80.0f, 4.0f, 0.18f);
+    // Front wheel motor - slightly different parameters for variation
+    ame_audio_source_init_sigmoid(&g_car_front_audio, 95.0f, 1.2f, 0.12f);
     g_car_front_audio.pan = 0.0f;
 
     // Ball rolling tone (spatial by pan)
@@ -286,54 +292,13 @@ int game_app_init(void) {
         }
     }
 
-    // If map loaded, spawn near its center; otherwise fallback
-    if (g_map_mesh.count > 0 && g_map_mesh.pos) {
-        float minx = 1e9f, miny = 1e9f, maxx = -1e9f, maxy = -1e9f;
-        for (unsigned i = 0; i < g_map_mesh.count; i++) {
-            float x = g_map_mesh.pos[i * 2 + 0];
-            float y = g_map_mesh.pos[i * 2 + 1];
-            if (x < minx)
-                minx = x;
-            if (x > maxx)
-                maxx = x;
-            if (y < miny)
-                miny = y;
-            if (y > maxy)
-                maxy = y;
-        }
-        float cx = 0.5f * (minx + maxx);
-        float cy = 0.5f * (miny + maxy);
-        // Start above center and raise until no overlaps with world colliders
-        float startY = cy + 40.0f;
-        float carW = g_car.cfg.body_w, carH = g_car.cfg.body_h + g_car.cfg.wheel_radius * 2.0f;
-        float humanW = g_human.w, humanH = g_human.h;
-        float y = startY;
-        for (int iter = 0; iter < 200; ++iter) {
-            bool carHit = physics_overlap_aabb(cx, y, carW, carH, g_car.body, g_human.body);
-            bool humanHit = physics_overlap_aabb(cx, y, humanW, humanH, g_car.body, g_human.body);
-            if (!carHit && !humanHit)
-                break;
-            y += 5.0f;
-        }
-        car_set_position(&g_car, cx, y);
-        human_set_position(&g_human, cx, y);
-    } else {
-        float x = 140.0f, y = 180.0f;
-        for (int iter = 0; iter < 200; ++iter) {
-            bool carHit = physics_overlap_aabb(x, y, g_car.cfg.body_w,
-                                               g_car.cfg.body_h + g_car.cfg.wheel_radius * 2.0f,
-                                               g_car.body, g_human.body);
-            bool humanHit =
-                physics_overlap_aabb(x, y, g_human.w, g_human.h, g_car.body, g_human.body);
-            if (!carHit && !humanHit)
-                break;
-            y += 5.0f;
-        }
-        car_set_position(&g_car, x, y);
-        human_set_position(&g_human, x, y);
-    }
-    SDL_Log("Spawned at: car=(%.1f,%.1f), human=(%.1f,%.1f)", (double)0, (double)0, (double)0,
-            (double)0);  // markers in log
+    // Spawn points.
+    gameplay_add_spawn_point(0.0f, 0.0f); // default spawn at world origin
+    car_set_position(&g_car, 10, 30);
+    human_set_position(&g_human, 10, 50);
+
+    // TEMP: spawn a test saw near the start so audio can be verified
+    gameplay_spawn_saw(60.0f, 60.0f, 8.0f);
 
     g_logic_thread = SDL_CreateThread(logic_thread_main, "logic", NULL);
     if (!g_logic_thread) {
@@ -372,6 +337,7 @@ int game_app_iterate(void* appstate) {
     }
 
     update_switch_logic();
+
     // Keep human near car when driving to allow quick switch back
     if (g_mode == CONTROL_CAR) {
         float cx, cy;
@@ -474,17 +440,25 @@ int game_app_iterate(void* appstate) {
         g_car_front_audio.u.osc.freq_hz = 0.0f;
     }
 
-    // Sync active audio sources
-    AmeAudioSourceRef arefs[3] = {{&g_music, g_music_id},
-                                  {&g_car_rear_audio, g_car_rear_audio_id},
-                                  {&g_car_front_audio, g_car_front_audio_id}};
-    ame_audio_sync_sources_refs(arefs, 3);
+    // Sync active audio sources (music, car, gameplay one-shots and saws) in one batch
+    AmeAudioSourceRef refs[128];
+    int rc = 0;
+    refs[rc++] = (AmeAudioSourceRef){ &g_music, g_music_id };
+    refs[rc++] = (AmeAudioSourceRef){ &g_car_rear_audio, g_car_rear_audio_id };
+    refs[rc++] = (AmeAudioSourceRef){ &g_car_front_audio, g_car_front_audio_id };
+    // Collect gameplay-managed sources (explosions, saws, etc.)
+    rc += gameplay_collect_audio_refs(refs + rc, (int)(sizeof(refs)/sizeof(refs[0])) - rc,
+                                      g_cam.x, g_cam.y, (float)g_w, g_cam.zoom, dt);
+    ame_audio_sync_sources_refs(refs, (size_t)rc);
 
     // Update triggers (AABB overlap only)
     float hx, hy, cx, cy;
     human_get_position(&g_human, &hx, &hy);
     car_get_position(&g_car, &cx, &cy);
     triggers_update(hx, hy, g_human.w, g_human.h, cx, cy, g_car.cfg.body_w, g_car.cfg.body_h);
+
+    // Gameplay update (audio panning, cleanup)
+    gameplay_update(&g_human, &g_car, g_cam.x, g_cam.y, (float)g_w, g_cam.zoom, dt);
 
     // Smooth camera follow of active entity
     float tx, ty;
@@ -500,10 +474,11 @@ int game_app_iterate(void* appstate) {
     glClear(GL_COLOR_BUFFER_BIT);
     pipeline_begin(&g_cam, g_w, g_h);
     if (g_map_mesh.count > 0) {
-        pipeline_mesh_submit(&g_map_mesh, 0, 0, 1, 1, 0.8f, 0.8f, 0.8f, 1.0f);
+        pipeline_mesh_submit(&g_map_mesh, 0, 0, 0, 1, 1, 1, 0.8f, 0.8f, 0.8f, 1.0f);
     }
     car_render(&g_car);
     human_render(&g_human);
+    gameplay_render();
     pipeline_end();
     SDL_GL_SwapWindow(g_window);
     return SDL_APP_CONTINUE;
@@ -521,6 +496,7 @@ void game_app_quit(void* appstate, int result) {
     human_shutdown(&g_human);
     pipeline_shutdown();
     free_obj_map(&g_map_mesh);
+    gameplay_shutdown();
     physics_shutdown();
     input_shutdown();
     ame_audio_shutdown();

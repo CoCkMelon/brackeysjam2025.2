@@ -1,0 +1,16 @@
+title: "Biscuit Fuel Intro"
+lines:
+  - id: start
+    speaker: Glitcher
+    text: "Hi."
+  - speaker: Glitcher
+    text: "How is your day?"
+  - speaker: Glitcher
+    text: "Controls are WS, or up-down acceleration"
+  - speaker: Glitcher
+    text: "AD, left-right yaw"
+  - speaker: Glitcher
+    text: "So. We have a good life over there."
+  - id: end
+    speaker: Guide
+    text: "Okay, have fun!"

@@ -8,9 +8,9 @@ extern "C" {
 // Forward declare camera from engine C API
 typedef struct AmeCamera AmeCamera;
 
-// Minimal mesh struct (positions are 2D x,y with optional UV)
+// Minimal mesh struct (positions are 3D x,y,z with optional UV)
 typedef struct {
-    float* pos;            // interleaved x,y pairs
+    float* pos;            // interleaved x,y,z triplets
     float* uv;             // interleaved u,v pairs (can be NULL)
     unsigned int count;    // number of vertices (not floats)
     unsigned int texture;  // GL texture id (0 if none)
@@ -54,8 +54,10 @@ void pipeline_sprite_quad_rot(float cx,
 void pipeline_mesh_submit(const AmeLocalMesh* mesh,
                           float tx,
                           float ty,
+                          float tz,
                           float sx,
                           float sy,
+                          float sz,
                           float r,
                           float g,
                           float b,

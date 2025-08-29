@@ -74,9 +74,11 @@ void car_init(Car* c) {
     if (!c)
         return;
     memset(c, 0, sizeof(*c));
+    c->max_hp = 200.0f;
+    c->hp = c->max_hp;
     // Defaults similar to reference
-    c->cfg.body_w = 40.0f;
-    c->cfg.body_h = 16.0f;
+    c->cfg.body_w = 35.0f;
+    c->cfg.body_h = 20.0f;
     c->cfg.wheel_radius = 6.0f;
     c->cfg.axle_offset_x_b = 10.0f;
     c->cfg.axle_offset_x_f = 12.0f;
@@ -229,8 +231,9 @@ void car_fixed(Car* c, float dt) {
 }
 
 void car_update(Car* c, float dt) {
-    (void)c;
     (void)dt;
+    if (!c) return;
+    if (c->hp < 0.0f) c->hp = 0.0f;
 }
 
 void car_render(const Car* c) {
@@ -313,4 +316,14 @@ float car_get_front_wheel_angular_speed(const Car* c) {
     float angular_speed = fabsf(c->wheel_f->GetAngularVelocity());  // absolute value for audio
     physics_unlock();
     return angular_speed;
+}
+
+void car_apply_damage(Car* c, float dmg) {
+    if (!c) return;
+    c->hp -= dmg;
+    if (c->hp < 0.0f) c->hp = 0.0f;
+    SDL_Log("Car HP: %.1f / %.1f", c->hp, c->max_hp);
+    if (c->hp == 0.0f) {
+        SDL_Log("Car destroyed");
+    }
 }

@@ -6,12 +6,11 @@
 #include <cfloat>
 #include <cmath>
 #include <vector>
+#include <unordered_map>
 #include "ame/physics.h"
 
-struct FixtureUserData {
-    bool is_ground;
-    bool is_sensor;
-};
+// Internal registry for gameplay flags per fixture (avoids Box2D user-data API differences)
+static std::unordered_map<const b2Fixture*, int> g_fixture_flags;
 
 static b2World* g_world = nullptr;
 static SDL_Thread* g_thread = NULL;
@@ -106,12 +105,7 @@ void physics_create_static_box(float x, float y, float w, float h, float frictio
     fd.shape = &sh;
     fd.friction = friction;
     b2Fixture* fx = b->CreateFixture(&fd);
-#if defined(b2_api_H)
-    FixtureUserData* ud = new FixtureUserData{true, false};
-    b2FixtureUserData fud;
-    fud.pointer = reinterpret_cast<uintptr_t>(ud);
-    fx->SetUserData(fud);
-#endif
+    (void)fx;
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -130,12 +124,7 @@ void physics_create_static_circle(float x, float y, float r, float friction) {
     fd.shape = &sh;
     fd.friction = friction;
     b2Fixture* fx = b->CreateFixture(&fd);
-#if defined(b2_api_H)
-    FixtureUserData* ud = new FixtureUserData{true, false};
-    b2FixtureUserData fud;
-    fud.pointer = reinterpret_cast<uintptr_t>(ud);
-    fx->SetUserData(fud);
-#endif
+    (void)fx;
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -152,12 +141,7 @@ void physics_create_static_edge(float x1, float y1, float x2, float y2, float fr
     fd.shape = &sh;
     fd.friction = friction;
     b2Fixture* fx = b->CreateFixture(&fd);
-#if defined(b2_api_H)
-    FixtureUserData* ud = new FixtureUserData{true, false};
-    b2FixtureUserData fud;
-    fud.pointer = reinterpret_cast<uintptr_t>(ud);
-    fx->SetUserData(fud);
-#endif
+    (void)fx;
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -206,7 +190,19 @@ static bool is_triangle_valid(const b2Vec2* v) {
     return true;
 }
 
-void physics_create_static_mesh_triangles(const float* pos, int vertex_count, float friction) {
+b2Body* physics_create_kinematic_circle(float x, float y, float r, float friction){
+    if (!g_world) return nullptr;
+    SDL_LockMutex(g_world_mtx);
+    b2BodyDef bd; bd.type = b2_kinematicBody; bd.position.Set(x,y);
+    b2Body* body = g_world->CreateBody(&bd);
+    b2CircleShape sh; sh.m_p.Set(0,0); sh.m_radius = r;
+    b2FixtureDef fd; fd.shape = &sh; fd.friction = friction; fd.density = 1.0f;
+    body->CreateFixture(&fd);
+    SDL_UnlockMutex(g_world_mtx);
+    return body;
+}
+
+void physics_create_static_mesh_triangles_tagged(const float* pos, int vertex_count, float friction, int flags) {
     if (!g_world || !pos || vertex_count < 3)
         return;
     SDL_LockMutex(g_world_mtx);
@@ -239,14 +235,13 @@ void physics_create_static_mesh_triangles(const float* pos, int vertex_count, fl
         fd.shape = &sh;
         fd.friction = friction;
         b2Fixture* fx = body->CreateFixture(&fd);
-#if defined(b2_api_H)
-        FixtureUserData* ud = new FixtureUserData{true, false};
-        b2FixtureUserData fud;
-        fud.pointer = reinterpret_cast<uintptr_t>(ud);
-        fx->SetUserData(fud);
-#endif
+        g_fixture_flags[fx] = flags;
     }
     SDL_UnlockMutex(g_world_mtx);
+}
+
+void physics_create_static_mesh_triangles(const float* pos, int vertex_count, float friction) {
+    physics_create_static_mesh_triangles_tagged(pos, vertex_count, friction, 0);
 }
 
 void physics_apply_impulse(b2Body* body, float ix, float iy) {
@@ -322,17 +317,9 @@ bool physics_is_grounded_ex(b2Body* body, float normal_threshold, float max_upwa
         b2Fixture* b = c->GetFixtureB();
         b2Fixture* my = (a->GetBody() == body) ? a : b;
         b2Fixture* other = (a->GetBody() == body) ? b : a;
-#if defined(b2_api_H)
-        // Box2D C++ 2.4 user data API
-        FixtureUserData* my_ud = reinterpret_cast<FixtureUserData*>(my->GetUserData().pointer);
-        FixtureUserData* ot_ud = reinterpret_cast<FixtureUserData*>(other->GetUserData().pointer);
-#else
-        FixtureUserData* my_ud = NULL;
-        FixtureUserData* ot_ud = NULL;
-#endif
-        if (!my_ud || !my_ud->is_sensor)
+        if (!my->IsSensor())
             continue;
-        if (!ot_ud || !ot_ud->is_ground)
+        if (other->GetBody()->GetType() != b2_staticBody)
             continue;
         b2WorldManifold wm;
         c->GetWorldManifold(&wm);
@@ -587,7 +574,60 @@ bool physics_overlap_aabb(float cx,
 }
 
 b2World* physics_get_world(void) {
-    return g_world;
+return g_world;
+}
+
+bool physics_body_touching_flag(b2Body* body, int required_flags){
+    if (!body) return false;
+    bool touching = false;
+    SDL_LockMutex(g_world_mtx);
+    for (b2ContactEdge* ce = body->GetContactList(); ce; ce = ce->next) {
+        b2Contact* c = ce->contact;
+        if (!c->IsTouching()) continue;
+        b2Fixture* a = c->GetFixtureA();
+        b2Fixture* b = c->GetFixtureB();
+        b2Fixture* other = (a->GetBody() == body) ? b : a;
+        if (other->IsSensor()) continue;
+        auto it = g_fixture_flags.find(other);
+        int flags = (it != g_fixture_flags.end()) ? it->second : 0;
+        if ((flags & required_flags) == required_flags){ touching = true; break; }
+    }
+    SDL_UnlockMutex(g_world_mtx);
+    return touching;
+}
+
+bool physics_body_touching_flag_speed(b2Body* body, int required_flags, float* out_max_speed){
+    if (out_max_speed) *out_max_speed = 0.0f;
+    if (!body) return false;
+    bool found = false;
+    float max_sp = 0.0f;
+    SDL_LockMutex(g_world_mtx);
+    for (b2ContactEdge* ce = body->GetContactList(); ce; ce = ce->next) {
+        b2Contact* c = ce->contact;
+        if (!c->IsTouching()) continue;
+        b2Fixture* a = c->GetFixtureA();
+        b2Fixture* b = c->GetFixtureB();
+        b2Fixture* my = (a->GetBody() == body) ? a : b;
+        b2Fixture* other = (a->GetBody() == body) ? b : a;
+        if (other->IsSensor()) continue;
+        auto it = g_fixture_flags.find(other);
+        int flags = (it != g_fixture_flags.end()) ? it->second : 0;
+        if ((flags & required_flags) != required_flags) continue;
+        // Estimate relative speed at contact point (other is typically static)
+        b2WorldManifold wm; c->GetWorldManifold(&wm);
+        int count = c->GetManifold() ? c->GetManifold()->pointCount : 1;
+        if (count <= 0) count = 1;
+        for (int i=0;i<count && i<2;i++){
+            b2Vec2 p = wm.points[i];
+            b2Vec2 v = body->GetLinearVelocityFromWorldPoint(p);
+            float sp = v.Length();
+            if (sp > max_sp) max_sp = sp;
+        }
+        found = true;
+    }
+    SDL_UnlockMutex(g_world_mtx);
+    if (out_max_speed) *out_max_speed = max_sp;
+    return found;
 }
 
 void physics_add_sensor_box(b2Body* body, float w, float h, float offset_x, float offset_y) {
@@ -601,12 +641,7 @@ void physics_add_sensor_box(b2Body* body, float w, float h, float offset_x, floa
     fd.isSensor = true;
     fd.density = 0.0f;
     b2Fixture* fx = body->CreateFixture(&fd);
-#if defined(b2_api_H)
-    FixtureUserData* ud = new FixtureUserData{false, true};
-    b2FixtureUserData fud;
-    fud.pointer = reinterpret_cast<uintptr_t>(ud);
-    fx->SetUserData(fud);
-#endif
+    (void)fx;
     SDL_UnlockMutex(g_world_mtx);
 }
 
@@ -666,4 +701,56 @@ void physics_lock(void) {
 void physics_unlock(void) {
     if (g_world_mtx)
         SDL_UnlockMutex(g_world_mtx);
+}
+
+void physics_set_angular_velocity(b2Body* body, float av){
+    if (!body) return; SDL_LockMutex(g_world_mtx); body->SetAngularVelocity(av); SDL_UnlockMutex(g_world_mtx);
+}
+
+float physics_get_angle(b2Body* body){
+    if (!body) return 0.0f; SDL_LockMutex(g_world_mtx); float a = body->GetAngle(); SDL_UnlockMutex(g_world_mtx); return a;
+}
+
+bool physics_bodies_touching(b2Body* a, b2Body* b){
+    if (!a || !b) return false;
+    bool touching = false;
+    SDL_LockMutex(g_world_mtx);
+    for (b2ContactEdge* ce = a->GetContactList(); ce; ce = ce->next){
+        b2Contact* c = ce->contact; if (!c->IsTouching()) continue;
+        b2Fixture* fa = c->GetFixtureA(); b2Fixture* fb = c->GetFixtureB();
+        b2Body* oa = fa->GetBody(); b2Body* ob = fb->GetBody();
+        if ((oa==a && ob==b) || (oa==b && ob==a)){
+            if (!fa->IsSensor() && !fb->IsSensor()){ touching = true; break; }
+        }
+    }
+    SDL_UnlockMutex(g_world_mtx);
+    return touching;
+}
+
+bool physics_bodies_contact_speed(b2Body* a, b2Body* b, float* out_max_speed){
+    if (out_max_speed) *out_max_speed = 0.0f;
+    if (!a || !b) return false;
+    bool found = false; float max_sp = 0.0f;
+    SDL_LockMutex(g_world_mtx);
+    for (b2ContactEdge* ce = a->GetContactList(); ce; ce = ce->next){
+        b2Contact* c = ce->contact; if (!c->IsTouching()) continue;
+        b2Fixture* fa = c->GetFixtureA(); b2Fixture* fb = c->GetFixtureB();
+        b2Body* oa = fa->GetBody(); b2Body* ob = fb->GetBody();
+        if (!((oa==a && ob==b) || (oa==b && ob==a))) continue;
+        if (fa->IsSensor() || fb->IsSensor()) continue;
+        b2WorldManifold wm; c->GetWorldManifold(&wm);
+        int count = c->GetManifold() ? c->GetManifold()->pointCount : 1;
+        if (count <= 0) count = 1;
+        for (int i=0;i<count && i<2;i++){
+            b2Vec2 p = wm.points[i];
+            b2Vec2 va = a->GetLinearVelocityFromWorldPoint(p);
+            b2Vec2 vb = b->GetLinearVelocityFromWorldPoint(p);
+            float sp = (va - vb).Length();
+            if (sp > max_sp) max_sp = sp;
+        }
+        found = true;
+    }
+    SDL_UnlockMutex(g_world_mtx);
+    if (out_max_speed) *out_max_speed = max_sp;
+    return found;
 }

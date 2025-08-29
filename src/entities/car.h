@@ -36,6 +36,9 @@ typedef struct {
     b2WheelJoint* joint_f;
     // Config
     CarConfig cfg;
+    // Health
+    float max_hp;
+    float hp;
     // Simple textures (optional)
     GLuint tex_body;
     GLuint tex_wheel;
@@ -56,6 +59,9 @@ float car_get_rear_wheel_angular_speed(const Car* c);
 float car_get_front_wheel_angular_speed(const Car* c);
 // Get current motor speed (for audio feedback)
 float car_get_motor_speed(const Car* c);
+
+// Damage helper
+void car_apply_damage(Car* c, float dmg);
 
 #ifdef __cplusplus
 }

@@ -7,6 +7,11 @@
 #include <string.h>
 #include "ame/camera.h"
 
+// Parallax tuning (higher K => stronger reduction of movement with distance)
+#ifndef PARALLAX_K
+#define PARALLAX_K 0.01f
+#endif
+
 // 3-Pass Pipeline Implementation:
 // Pass 1: Sprites (batched by texture, full resolution)
 // Pass 2: Meshes (rendered to offscreen texture, supersampled)
@@ -18,12 +23,13 @@ static const char* SPRITE_VS =
     "layout(location=0) in vec2 a_pos;\n"
     "layout(location=1) in vec2 a_uv;\n"
     "layout(location=2) in vec4 a_col;\n"
+    "layout(location=3) in float a_par;\n"
     "uniform vec2 u_res;\n"
     "uniform vec4 u_cam; // x,y,zoom,rot\n"
     "out vec4 v_col;\n"
     "out vec2 v_uv;\n"
     "void main(){\n"
-    "  vec2 p = a_pos - u_cam.xy;\n"
+    "  vec2 p = a_pos - u_cam.xy * a_par;\n"
     "  p *= u_cam.z;\n"
     "  vec2 ndc = vec2((p.x/u_res.x)*2.0 - 1.0, (p.y/u_res.y)*2.0 - 1.0);\n"
     "  gl_Position = vec4(ndc, 0.0, 1.0);\n"
@@ -47,12 +53,13 @@ static const char* MESH_VS =
     "layout(location=0) in vec2 a_pos;\n"
     "layout(location=1) in vec2 a_uv;\n"
     "layout(location=2) in vec4 a_col;\n"
+    "layout(location=3) in float a_par;\n"
     "uniform vec2 u_res;\n"
     "uniform vec4 u_cam; // x,y,zoom,rot\n"
     "out vec4 v_col;\n"
     "out vec2 v_uv;\n"
     "void main(){\n"
-    "  vec2 p = a_pos - u_cam.xy;\n"
+    "  vec2 p = a_pos - u_cam.xy * a_par;\n"
     "  p *= u_cam.z;\n"
     "  vec2 ndc = vec2((p.x/u_res.x)*2.0 - 1.0, (p.y/u_res.y)*2.0 - 1.0);\n"
     "  gl_Position = vec4(ndc, 0.0, 1.0);\n"
@@ -92,8 +99,14 @@ static const char* COMP_FS =
 
 // Vertex format
 typedef struct {
-    float x, y, u, v, r, g, b, a;
+    float x, y, u, v, r, g, b, a, par;
 } Vtx;
+
+// Triangle with depth for sorting
+typedef struct {
+    Vtx verts[3];
+    float depth;  // Average Z of the triangle for sorting
+} Triangle;
 
 // Sprite batch (grouped by texture)
 typedef struct {
@@ -106,7 +119,10 @@ typedef struct {
 // Mesh batch
 typedef struct {
     const AmeLocalMesh* mesh;
-    float tx, ty, sx, sy, r, g, b, a;
+    float tx, ty, tz;     // object translation xyz
+    float sx, sy, sz;     // object scale xyz
+    float r, g, b, a;     // color
+    float depth;          // calculated depth for sorting (higher values render behind)
 } MeshBatch;
 
 // Pipeline state
@@ -308,6 +324,8 @@ bool pipeline_init(void) {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vtx), (void*)offsetof(Vtx, u));
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vtx), (void*)offsetof(Vtx, r));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vtx), (void*)offsetof(Vtx, par));
 
     glGenVertexArrays(1, &g_pipe.mesh_vao);
     glGenBuffers(1, &g_pipe.mesh_vbo);
@@ -319,6 +337,8 @@ bool pipeline_init(void) {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vtx), (void*)offsetof(Vtx, u));
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vtx), (void*)offsetof(Vtx, r));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vtx), (void*)offsetof(Vtx, par));
 
     glGenVertexArrays(1, &g_pipe.comp_vao);
 
@@ -488,9 +508,9 @@ void pipeline_sprite_quad_rot(float cx,
     float x1 = cx + w * 0.5f;
     float y1 = cy + h * 0.5f;
 
-    Vtx quad[6] = {{x0, y0, 0, 0, r, g, b, a}, {x1, y0, 1, 0, r, g, b, a},
-                   {x0, y1, 0, 1, r, g, b, a}, {x1, y0, 1, 0, r, g, b, a},
-                   {x1, y1, 1, 1, r, g, b, a}, {x0, y1, 0, 1, r, g, b, a}};
+Vtx quad[6] = {{x0, y0, 0, 0, r, g, b, a, 1.0f}, {x1, y0, 1, 0, r, g, b, a, 1.0f},
+                   {x0, y1, 0, 1, r, g, b, a, 1.0f}, {x1, y0, 1, 0, r, g, b, a, 1.0f},
+                   {x1, y1, 1, 1, r, g, b, a, 1.0f}, {x0, y1, 0, 1, r, g, b, a, 1.0f}};
     // Rotate all verts around center (cx, cy)
     for (int i = 0; i < 6; i++) {
         rotate_point(cx, cy, radians, &quad[i].x, &quad[i].y);
@@ -502,14 +522,19 @@ void pipeline_sprite_quad_rot(float cx,
 void pipeline_mesh_submit(const AmeLocalMesh* mesh,
                           float tx,
                           float ty,
+                          float tz,
                           float sx,
                           float sy,
+                          float sz,
                           float r,
                           float g,
                           float b,
                           float a) {
     if (!mesh || mesh->count == 0 || !mesh->pos)
         return;
+
+    // For triangle-level sorting, we don't need to calculate mesh depth here
+    // Instead, we'll sort individual triangles during rendering
 
     // Expand mesh batches if needed
     if (g_pipe.mesh_batch_count >= g_pipe.mesh_batch_capacity) {
@@ -522,12 +547,15 @@ void pipeline_mesh_submit(const AmeLocalMesh* mesh,
     batch->mesh = mesh;
     batch->tx = tx;
     batch->ty = ty;
+    batch->tz = tz;
     batch->sx = sx;
     batch->sy = sy;
+    batch->sz = sz;
     batch->r = r;
     batch->g = g;
     batch->b = b;
     batch->a = a;
+    batch->depth = 0.0f;  // Not used for triangle-level sorting
 }
 
 // Pass 1: Render sprites to screen (full resolution)
@@ -577,6 +605,15 @@ void pipeline_pass_sprites(void) {
     glBindVertexArray(0);
 }
 
+// Comparison function for triangle depth sorting (smaller Z values render behind - ascending order)
+static int compare_triangle_depth(const void* a, const void* b) {
+    const Triangle* tri_a = (const Triangle*)a;
+    const Triangle* tri_b = (const Triangle*)b;
+    if (tri_a->depth < tri_b->depth) return -1; // a comes first (smaller Z behind)
+    if (tri_a->depth > tri_b->depth) return 1;  // b comes first (larger Z in front)
+    return 0; // equal depth
+}
+
 // Pass 2: Render meshes to offscreen texture (supersampled)
 void pipeline_pass_meshes(void) {
     if (g_pipe.mesh_batch_count == 0) {
@@ -614,36 +651,93 @@ void pipeline_pass_meshes(void) {
         glUniform1i(g_pipe.mesh_u_tex, 0);
     }
 
-    // Render each mesh
+    // Collect all triangles from all meshes and sort them by depth
+    size_t total_triangles = 0;
+    for (size_t i = 0; i < g_pipe.mesh_batch_count; i++) {
+        total_triangles += g_pipe.mesh_batches[i].mesh->count / 3;
+    }
+
+    if (total_triangles == 0) {
+        return;
+    }
+
+    Triangle* triangles = malloc(total_triangles * sizeof(Triangle));
+    size_t tri_index = 0;
+
+    // Build triangles with depth information
     for (size_t i = 0; i < g_pipe.mesh_batch_count; i++) {
         const MeshBatch* batch = &g_pipe.mesh_batches[i];
         const AmeLocalMesh* mesh = batch->mesh;
 
-        // Build vertex buffer
-        size_t vert_count = mesh->count;
-        Vtx* verts = malloc(vert_count * sizeof(Vtx));
+        // Process triangles (groups of 3 vertices)
+        for (size_t v = 0; v < mesh->count; v += 3) {
+            if (v + 2 >= mesh->count) break;  // Ensure we have a complete triangle
 
-        for (size_t v = 0; v < vert_count; v++) {
-            float px = mesh->pos[v * 2 + 0] * batch->sx + batch->tx;
-            float py = mesh->pos[v * 2 + 1] * batch->sy + batch->ty;
-            float u = mesh->uv ? mesh->uv[v * 2 + 0] : 0.0f;
-            float uv = mesh->uv ? mesh->uv[v * 2 + 1] : 0.0f;
+            Triangle* tri = &triangles[tri_index++];
+            float total_z = 0.0f;
 
-            verts[v] = (Vtx){px, py, u, uv, batch->r, batch->g, batch->b, batch->a};
+            // Process 3 vertices of the triangle
+            for (int j = 0; j < 3; j++) {
+                size_t vert_idx = v + j;
+                
+                // Extract xyz from mesh, transform, and use xy for rendering
+                float vx = mesh->pos[vert_idx * 3 + 0];  // vertex x
+                float vy = mesh->pos[vert_idx * 3 + 1];  // vertex y
+                float vz = mesh->pos[vert_idx * 3 + 2];  // vertex z
+                
+                // Apply object transformation
+                float px = vx * batch->sx + batch->tx;
+                float py = vy * batch->sy + batch->ty;
+                float pz = vz * batch->sz + batch->tz;  // transformed Z for depth & parallax
+                
+                total_z += pz;
+                
+                float u = mesh->uv ? mesh->uv[vert_idx * 2 + 0] : 0.0f;
+                float uv = mesh->uv ? mesh->uv[vert_idx * 2 + 1] : 0.0f;
+
+                // Map depth to parallax factor using inverse falloff: a_par = 1 / (1 + K*|Z|)
+                // Large |Z| (far) -> near zero movement; small |Z| (near) -> ~1.0
+                float par = 1.0f / (1.0f + fabsf(pz) * PARALLAX_K);
+                // Optional cap to avoid overscaling; keep within [0, 1]
+                if (par < 0.0f) par = 0.0f;
+                if (par > 1.0f) par = 1.0f;
+
+                tri->verts[j] = (Vtx){px, py, u, uv, batch->r, batch->g, batch->b, batch->a, par};
+            }
+            
+            // Calculate average depth for this triangle
+            tri->depth = total_z / 3.0f;
         }
-
-        // Upload and render
-        glBindBuffer(GL_ARRAY_BUFFER, g_pipe.mesh_vbo);
-        glBufferData(GL_ARRAY_BUFFER, vert_count * sizeof(Vtx), verts, GL_DYNAMIC_DRAW);
-
-        glActiveTexture(GL_TEXTURE0);
-        GLuint tex = mesh->texture ? mesh->texture : g_pipe.white_tex;
-        glBindTexture(GL_TEXTURE_2D, tex);
-
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vert_count);
-
-        free(verts);
     }
+
+    // Sort triangles by depth (higher depth renders behind)
+    if (total_triangles > 1) {
+        qsort(triangles, total_triangles, sizeof(Triangle), compare_triangle_depth);
+    }
+
+    // Render all sorted triangles
+    size_t total_vertices = total_triangles * 3;
+    Vtx* all_verts = malloc(total_vertices * sizeof(Vtx));
+    
+    for (size_t i = 0; i < total_triangles; i++) {
+        memcpy(&all_verts[i * 3], triangles[i].verts, 3 * sizeof(Vtx));
+    }
+
+    // Upload and render all triangles at once
+    glBindBuffer(GL_ARRAY_BUFFER, g_pipe.mesh_vbo);
+    glBufferData(GL_ARRAY_BUFFER, total_vertices * sizeof(Vtx), all_verts, GL_DYNAMIC_DRAW);
+
+    glActiveTexture(GL_TEXTURE0);
+    // Use the texture from the first mesh (assuming all share the same texture)
+    GLuint tex = (g_pipe.mesh_batch_count > 0 && g_pipe.mesh_batches[0].mesh->texture) 
+                 ? g_pipe.mesh_batches[0].mesh->texture 
+                 : g_pipe.white_tex;
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)total_vertices);
+
+    free(triangles);
+    free(all_verts);
 
     // Generate mipmaps for better downsampling
     glBindTexture(GL_TEXTURE_2D, g_pipe.mesh_tex);

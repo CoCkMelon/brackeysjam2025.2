@@ -20,6 +20,11 @@ typedef struct {
 } HumanAnimConfig;
 
 typedef struct {
+    float max_hp;
+    float hp;
+} Health;
+
+typedef struct {
     b2Body* body;
     int hidden;
     // Animation frames (textures) extracted from a single spritesheet row
@@ -35,6 +40,8 @@ typedef struct {
     float pending_tx, pending_ty;
     // Temporarily disable horizontal control after a wall jump so impulse isn't overridden
     float x_control_lock;  // seconds remaining; when >0, horizontal velocity isn't forced
+    // Health
+    Health health;
 } Human;
 
 void human_init(Human* h);
@@ -45,6 +52,9 @@ void human_render(const Human* h);
 void human_set_position(Human* h, float x, float y);
 void human_get_position(const Human* h, float* x, float* y);
 void human_hide(Human* h, bool hide);
+
+// Health helpers
+void human_apply_damage(Human* h, float dmg);
 
 #ifdef __cplusplus
 }
