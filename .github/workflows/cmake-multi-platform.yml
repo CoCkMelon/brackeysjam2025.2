@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-20.04-arm64, ubuntu-20.04-arm]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         build_type: [Release]
         c_compiler: [gcc, clang, cl]
         cpp_compiler: [g++, clang++, cl]
@@ -29,12 +29,6 @@ jobs:
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
-          - os: ubuntu-20.04-arm64
-            c_compiler: gcc
-            cpp_compiler: g++
-          - os: ubuntu-20.04-arm
-            c_compiler: gcc
-            cpp_compiler: g++
         exclude:
           - os: windows-latest
             c_compiler: gcc
@@ -46,27 +40,25 @@ jobs:
             c_compiler: gcc
           - os: macos-latest
             c_compiler: cl
-          - os: ubuntu-20.04-arm64
-            c_compiler: clang
-          - os: ubuntu-20.04-arm64
-            c_compiler: cl
-          - os: ubuntu-20.04-arm
-            c_compiler: clang
-          - os: ubuntu-20.04-arm
-            c_compiler: cl
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup SDL
-      uses: libsdl-org/setup-sdl@v1
-      with:
-        version: 3-head
-        version-sdl-image: 3-head
-        version-sdl-mixer: 3-head
-        version-sdl-ttf: 3-head
-        pre-release: true
-        install-linux-dependencies: true
+    - name: Install SDL dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+
+    - name: Install SDL dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install sdl2 sdl2_image sdl2_mixer sdl2_ttf
+
+    - name: Install SDL dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install sdl2 sdl2_image sdl2_mixer sdl2_ttf
 
     - name: Set reusable strings
       id: strings
@@ -105,57 +97,3 @@ jobs:
       with:
         name: game-${{ matrix.os }}-${{ matrix.build_type }}
         path: ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip
-
-  build-freebsd:
-    runs-on: ubuntu-latest
-    name: Build on FreeBSD
-    steps:
-    - uses: cross-platform-actions/action@v0.12.0
-      with:
-        operating_system: freebsd
-        run: |
-          # Install necessary packages
-          sudo pkg install -y cmake git zip wget
-          git clone https://github.com/${{ github.repository }}.git
-          cd ${{ github.event.repository.name }}
-          mkdir build
-          cd build
-          wget https://github.com/libsdl-org/SDL/releases/download/preview-3.0.0/SDL3-devel-3.0.0-VC.zip
-          unzip SDL3-devel-3.0.0-VC.zip
-          cmake -DCMAKE_PREFIX_PATH=$PWD/SDL3-devel-3.0.0-VC ..
-          cmake --build .
-          cp -r ../Assets .
-          zip -r game-freebsd.zip .
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: game-freebsd
-        path: ${{ github.workspace }}/game-freebsd.zip
-
-  build-openbsd:
-    runs-on: ubuntu-latest
-    name: Build on OpenBSD
-    steps:
-    - uses: cross-platform-actions/action@v0.12.0
-      with:
-        operating_system: openbsd
-        run: |
-          # Install necessary packages
-          doas pkg_add cmake git zip wget
-          git clone https://github.com/${{ github.repository }}.git
-          cd ${{ github.event.repository.name }}
-          mkdir build
-          cd build
-          wget https://github.com/libsdl-org/SDL/releases/download/preview-3.0.0/SDL3-devel-3.0.0-VC.zip
-          unzip SDL3-devel-3.0.0-VC.zip
-          cmake -DCMAKE_PREFIX_PATH=$PWD/SDL3-devel-3.0.0-VC ..
-          cmake --build .
-          cp -r ../Assets .
-          zip -r game-openbsd.zip .
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: game-openbsd
-        path: ${{ github.workspace }}/game-openbsd.zip
