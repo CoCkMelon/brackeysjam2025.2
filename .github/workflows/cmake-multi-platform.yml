@@ -1,4 +1,4 @@
-name: Build Game for Multiple Platforms (SDL3 Prebuilt)
+name: Build Game on Multiple Platforms
 
 on:
   push:
@@ -12,193 +12,150 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-20.04-arm64, ubuntu-20.04-arm]
+        build_type: [Release]
+        c_compiler: [gcc, clang, cl]
+        cpp_compiler: [g++, clang++, cl]
         include:
-          # --- Windows ---
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
-            platform_name: windows-x64
-            arch: x64
-
-          # --- Linux x64 (GCC) ---
-          - os: ubuntu-24.04
+          - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-            platform_name: linux-x64
-            arch: x64
-
-          # --- Linux x64 (Clang) ---
-          - os: ubuntu-24.04
+          - os: ubuntu-latest
             c_compiler: clang
             cpp_compiler: clang++
-            platform_name: linux-x64-clang
-            arch: x64
-
-          # --- Linux ARM64 ---
-          - os: ubuntu-24.04
-            c_compiler: gcc
-            cpp_compiler: g++
-            platform_name: linux-arm64
-            arch: arm64
-
-          # --- Linux ARMv7 (32-bit) ---
-          - os: ubuntu-24.04
-            c_compiler: gcc
-            cpp_compiler: g++
-            platform_name: linux-armv7
-            arch: arm
-
-          # --- macOS Intel/Apple Silicon ---
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
-            platform_name: macos-universal
-            arch: universal
-
+          - os: ubuntu-20.04-arm64
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-20.04-arm
+            c_compiler: gcc
+            cpp_compiler: g++
         exclude:
           - os: windows-latest
             c_compiler: gcc
           - os: windows-latest
             c_compiler: clang
-          - os: ubuntu-24.04
+          - os: ubuntu-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
+          - os: macos-latest
+            c_compiler: cl
+          - os: ubuntu-20.04-arm64
+            c_compiler: clang
+          - os: ubuntu-20.04-arm64
+            c_compiler: cl
+          - os: ubuntu-20.04-arm
+            c_compiler: clang
+          - os: ubuntu-20.04-arm
             c_compiler: cl
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up paths
-      id: paths
+    - name: Setup SDL
+      uses: libsdl-org/setup-sdl@v1
+      with:
+        version: 3-head
+        version-sdl-image: 3-head
+        version-sdl-mixer: 3-head
+        version-sdl-ttf: 3-head
+        pre-release: true
+        install-linux-dependencies: true
+
+    - name: Set reusable strings
+      id: strings
       shell: bash
       run: |
-        echo "build_dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-        echo "dist_dir=${{ github.workspace }}/dist/${{ matrix.platform_name }}" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    # ========================
-    # DOWNLOAD PREBUILT SDL3
-    # ========================
-    - name: Download Prebuilt SDL3 (Cross-platform)
-      shell: bash
-      run: |
-        mkdir -p sdl3
-        cd sdl3
-
-        PLATFORM="${{ matrix.platform_name }}"
-        ARCH="${{ matrix.arch }}"
-
-        if [[ "$PLATFORM" == windows* ]]; then
-          URL="https://github.com/libsdl-org/SDL/releases/download/main/sdl3-$(date -u +%Y%m%d)-win32-x64.zip"
-          curl -L -o sdl3.zip "$URL" || { echo "⚠️ Fallback: Using latest release"; curl -L -o sdl3.zip "https://github.com/libsdl-org/SDL/releases/latest/download/SDL3-devel-*.zip"; }
-          unzip sdl3.zip -d extracted
-          mv extracted/*/* . 2>/dev/null || true  # flatten structure
-          rm -rf extracted sdl3.zip
-
-        elif [[ "$PLATFORM" == macos* ]]; then
-          URL="https://github.com/libsdl-org/SDL/releases/download/main/sdl3-$(date -u +%Y%m%d)-macos-universal.tar.gz"
-          curl -L -o sdl3.tar.gz "$URL" || { echo "⚠️ Fallback: Using latest release"; curl -L -o sdl3.tar.gz "https://github.com/libsdl-org/SDL/releases/latest/download/SDL3-*.dmg"; exit 1; } # DMG not supported in CI easily
-          # ⚠️ For now, we fallback to Homebrew on macOS since prebuilt tarballs are unstable
-          echo "Using Homebrew for macOS SDL3..."
-          exit 0
-
-        elif [[ "$PLATFORM" == linux* ]]; then
-          if [[ "$ARCH" == "arm64" ]]; then
-            URL="https://github.com/libsdl-org/SDL/releases/download/main/sdl3-$(date -u +%Y%m%d)-linux-aarch64.tar.gz"
-          elif [[ "$ARCH" == "arm" ]]; then
-            URL="https://github.com/libsdl-org/SDL/releases/download/main/sdl3-$(date -u +%Y%m%d)-linux-armhf.tar.gz"
-          else
-            URL="https://github.com/libsdl-org/SDL/releases/download/main/sdl3-$(date -u +%Y%m%d)-linux-x64.tar.gz"
-          fi
-
-          curl -L -o sdl3.tar.gz "$URL" || { echo "⚠️ Fallback: Using latest generic Linux build"; curl -L -o sdl3.tar.gz "https://github.com/libsdl-org/SDL/releases/latest/download/SDL3-devel-*.tar.gz"; }
-          tar -xzf sdl3.tar.gz --strip-components=1
-          rm sdl3.tar.gz
-        fi
-
-        # Export path for CMake to find SDL3
-        echo "SDL3_DIR=$(pwd)" >> $GITHUB_ENV
-        echo "SDL3_PATH=$(pwd)" >> $GITHUB_ENV
-
-    # --- Install System Dependencies ---
-    - name: Install Linux system deps (apt)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libgl1-mesa-dev libpulse-dev libudev-dev libasound2-dev
-
-    - name: Install macOS deps via Homebrew (fallback)
-      if: runner.os == 'macOS'
-      run: |
-        brew install sdl2 sdl2_image sdl2_mixer sdl2_ttf || true
-        # Note: SDL3 formula may not exist yet — check https://formulae.brew.sh/
-        # Consider building from source or waiting for official formula.
-
-    # --- Configure CMake ---
     - name: Configure CMake
-      env:
-        SDL3_DIR: ${{ env.SDL3_DIR }}
       run: >
-        cmake
-        -B "${{ steps.paths.outputs.build_dir }}"
-        -S "${{ github.workspace }}"
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type || 'Release' }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DSDL3_DIR="${{ env.SDL3_DIR }}"
-        ${{ runner.os == 'Windows' && '-G "Visual Studio 17 2022" -A x64' || '' }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -S ${{ github.workspace }}
 
-    # --- Build ---
-    - name: Build Project
-      run: >
-        cmake
-        --build "${{ steps.paths.outputs.build_dir }}"
-        ${{ runner.os == 'Windows' && format('--config {0}', matrix.build_type || 'Release') || '' }}
-        --parallel 2
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    # --- Prepare Distribution ---
-    - name: Create dist directory and copy assets
+    - name: Test
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: ctest --build-config ${{ matrix.build_type }}
+
+    - name: Copy Assets to Build Directory
       shell: bash
       run: |
-        mkdir -p "${{ steps.paths.outputs.dist_dir }}"
+        cp -r ${{ github.workspace }}/Assets ${{ steps.strings.outputs.build-output-dir }}/Assets
 
-        # Copy executable(s)
-        if [[ "${{ runner.os }}" == "Windows" ]]; then
-          cp "${{ steps.paths.outputs.build_dir }}/${{ matrix.build_type || 'Release' }}/"*.exe "${{ steps.paths.outputs.dist_dir }}"/ 2>/dev/null || echo "No .exe found"
-          # Also copy SDL3 DLLs if needed
-          cp "${{ env.SDL3_DIR }}/lib/x64/SDL3.dll" "${{ steps.paths.outputs.dist_dir }}"/ 2>/dev/null || echo "SDL3.dll not found (normal if static linked)"
-        elif [[ "${{ runner.os }}" == "Linux" ]]; then
-          cp "${{ steps.paths.outputs.build_dir }}/"* "${{ steps.paths.outputs.dist_dir }}"/ 2>/dev/null || echo "No binaries found"
-          # Copy shared libs if dynamically linked (optional)
-          # ldd yourgame | grep SDL3 → if needed, bundle .so files
-        elif [[ "${{ runner.os }}" == "macOS" ]]; then
-          # If producing .app bundle later, adjust here
-          cp "${{ steps.paths.outputs.build_dir }}/"* "${{ steps.paths.outputs.dist_dir }}"/ 2>/dev/null || echo "No macOS binaries found"
-        fi
-
-        # Copy assets folder
-        if [[ -d "${{ github.workspace }}/assets" ]]; then
-          cp -r "${{ github.workspace }}/assets" "${{ steps.paths.outputs.dist_dir }}/"
-        else
-          echo "⚠️ assets/ folder not found — skipping."
-
-    # --- Package as ZIP ---
-    - name: Create ZIP Archive
+    - name: Create Zip Archive
       shell: bash
-      working-directory: ${{ github.workspace }}/dist
       run: |
-        zip -r "../${{ matrix.platform_name }}.zip" "${{ matrix.platform_name }}"
+        cd ${{ steps.strings.outputs.build-output-dir }}
+        zip -r ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip .
 
-    # --- Upload Artifact ---
-    - name: Upload Build Artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: game-${{ matrix.platform_name }}
-        path: ${{ github.workspace }}/dist/${{ matrix.platform_name }}.zip
-        retention-days: 7
+        name: game-${{ matrix.os }}-${{ matrix.build_type }}
+        path: ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip
 
-    # --- Optional: Run Tests ---
-    - name: Run Tests (if available)
-      if: always()
-      working-directory: ${{ steps.paths.outputs.build_dir }}
-      run: >
-        ctest
-        ${{ runner.os == 'Windows' && format('--build-config {0}', matrix.build_type || 'Release') || '' }}
-        --output-on-failure
+  build-freebsd:
+    runs-on: ubuntu-latest
+    name: Build on FreeBSD
+    steps:
+    - uses: cross-platform-actions/action@v0.12.0
+      with:
+        operating_system: freebsd
+        run: |
+          # Install necessary packages
+          sudo pkg install -y cmake git zip wget
+          git clone https://github.com/${{ github.repository }}.git
+          cd ${{ github.event.repository.name }}
+          mkdir build
+          cd build
+          wget https://github.com/libsdl-org/SDL/releases/download/preview-3.0.0/SDL3-devel-3.0.0-VC.zip
+          unzip SDL3-devel-3.0.0-VC.zip
+          cmake -DCMAKE_PREFIX_PATH=$PWD/SDL3-devel-3.0.0-VC ..
+          cmake --build .
+          cp -r ../Assets .
+          zip -r game-freebsd.zip .
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: game-freebsd
+        path: ${{ github.workspace }}/game-freebsd.zip
+
+  build-openbsd:
+    runs-on: ubuntu-latest
+    name: Build on OpenBSD
+    steps:
+    - uses: cross-platform-actions/action@v0.12.0
+      with:
+        operating_system: openbsd
+        run: |
+          # Install necessary packages
+          doas pkg_add cmake git zip wget
+          git clone https://github.com/${{ github.repository }}.git
+          cd ${{ github.event.repository.name }}
+          mkdir build
+          cd build
+          wget https://github.com/libsdl-org/SDL/releases/download/preview-3.0.0/SDL3-devel-3.0.0-VC.zip
+          unzip SDL3-devel-3.0.0-VC.zip
+          cmake -DCMAKE_PREFIX_PATH=$PWD/SDL3-devel-3.0.0-VC ..
+          cmake --build .
+          cp -r ../Assets .
+          zip -r game-openbsd.zip .
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: game-openbsd
+        path: ${{ github.workspace }}/game-openbsd.zip
