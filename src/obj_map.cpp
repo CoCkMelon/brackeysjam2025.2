@@ -136,12 +136,15 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
                 u->y = cy;
             }
             // Not once: can keep firing when overlapped
-            triggers_add(trig_name.c_str(), box, 0, gameplay_on_trigger, (void*)u);
+            // Duplicate name to keep it valid beyond this function
+            char* trig_copy = SDL_strdup(trig_name.c_str());
+            triggers_add(trig_copy ? trig_copy : trig_name.c_str(), box, 1, gameplay_on_trigger,
+                         (void*)u);
             continue;
         }
-        // Back-compat: support legacy concatenated trigger names
+        // Back-compat: support legacy concatenated trigger names (incl. TriggerDialogue)
         if (has_prefix(name, "TriggerGrenade") || has_prefix(name, "TriggerRocket") ||
-            has_prefix(name, "TriggerTurretShot")) {
+            has_prefix(name, "TriggerTurretShot") || has_prefix(name, "TriggerDialogue")) {
             // Create a triggers AABB for this shape
             float cx = 0.5f * (minx + maxx);
             float cy = 0.5f * (miny + maxy);
@@ -155,7 +158,10 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
                 u->y = cy;
             }
             // Not once: can keep firing when overlapped
-            triggers_add(name.c_str(), box, 0, gameplay_on_trigger, (void*)u);
+            // Duplicate name to keep it valid beyond this function
+            char* name_copy = SDL_strdup(name.c_str());
+            triggers_add(name_copy ? name_copy : name.c_str(), box, 1, gameplay_on_trigger,
+                         (void*)u);
             continue;
         }
         if (has_prefix(name, "Mine")) {

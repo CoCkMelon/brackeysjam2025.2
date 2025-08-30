@@ -48,17 +48,17 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+        sudo apt-get install -y libsdl3-dev libsdl3-image-dev libsdl3-mixer-dev libsdl3-ttf-dev
 
     - name: Install SDL dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install sdl2 sdl2_image sdl2_mixer sdl2_ttf
+        brew install sdl3 sdl3_image sdl3_mixer sdl3_ttf
 
     - name: Install SDL dependencies (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        choco install sdl2 sdl2_image sdl2_mixer sdl2_ttf
+        choco install sdl3 sdl3_image sdl3_mixer sdl3_ttf
 
     - name: Set reusable strings
       id: strings

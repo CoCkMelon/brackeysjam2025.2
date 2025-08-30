@@ -88,7 +88,7 @@ void gameplay_spawn_saw(float x, float y, float radius);
 
 // Spawn activation proximity radius (when car is near a spawn point it becomes active)
 #ifndef GAME_SPAWN_ACTIVATE_RADIUS
-#define GAME_SPAWN_ACTIVATE_RADIUS 1000.0f
+#define GAME_SPAWN_ACTIVATE_RADIUS 200.0f
 #endif
 
 #ifdef __cplusplus

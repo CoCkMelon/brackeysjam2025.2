@@ -1,0 +1,17 @@
+title: "annoying"
+lines:
+  - id: start
+    speaker: Venera
+    text: "Oh."
+  - speaker: Venera
+    text: "I dislike that part."
+  - speaker: Venera
+    text: "So annoying."
+  - speaker: Glitcher
+    text: "I am a bit worried."
+  - speaker: Glitcher
+    text: "Are you really a racer to pass such callenge without breaking me?"
+  - speaker: Venera
+    text: "Don't be afraid, collision damage was not added to this game."
+  - speaker: Glitcher
+    text: "Splendid."

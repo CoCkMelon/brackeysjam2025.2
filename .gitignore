@@ -7,3 +7,5 @@ compile_commands.json
 *.o
 *.exe
 *.log
+*swp
+*fuse

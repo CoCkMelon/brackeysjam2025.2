@@ -10,18 +10,19 @@
 #include "ame/audio.h"
 #include "ame/camera.h"
 #include "ame_dialogue.h"
+#include "config.h"
 #include "dialogue_generated.h"
+#include "dialogue_manager.h"
 #include "entities/car.h"
 #include "entities/human.h"
+#include "gameplay.h"
 #include "input.h"
 #include "obj_map.h"
 #include "path_util.h"
 #include "physics.h"
 #include "render/pipeline.h"
 #include "triggers.h"
-#include "gameplay.h"
 #include "ui.h"
-#include "config.h"
 
 static SDL_Window* g_window = NULL;
 static SDL_GLContext g_gl = NULL;
@@ -29,11 +30,6 @@ static int g_w = APP_DEFAULT_WIDTH, g_h = APP_DEFAULT_HEIGHT;
 
 static AmeCamera g_cam;
 static atomic_bool g_should_quit = false;
-
-// Dialogue runtime (engine API)
-static AmeDialogueRuntime g_dlg_rt;
-static const AmeDialogueScene* g_dlg_scene = NULL;
-static bool g_dlg_active = false;
 
 typedef enum { CONTROL_HUMAN, CONTROL_CAR } ControlMode;
 static ControlMode g_mode = CONTROL_CAR;
@@ -111,30 +107,6 @@ static void shutdown_gl(void) {
     }
 }
 
-// Local dialogue loader (searches project's generated scenes)
-static const AmeDialogueScene* load_local_dialogue(const char* name) {
-    if (!name) return NULL;
-    
-    for (size_t i = 0; i < ame__generated_scenes_count; i++) {
-        const AmeDialogueScene* scene = ame__generated_scenes[i];
-        if (scene && scene->scene && SDL_strcmp(scene->scene, name) == 0) {
-            return scene;
-        }
-    }
-    return NULL;
-}
-
-// Dialogue trigger hook: forward to our trigger manager by name
-static void dialogue_trigger_hook(const char* trigger_name,
-                                  const AmeDialogueLine* line,
-                                  void* user) {
-    (void)line;
-    (void)user;
-    if (trigger_name && trigger_name[0]) {
-        triggers_fire(trigger_name);
-    }
-}
-
 static int logic_thread_main(void* ud) {
     (void)ud;
     uint64_t last = SDL_GetTicksNS();
@@ -175,7 +147,7 @@ static void update_switch_logic(void) {
         float dx = hx - cx, dy = hy - cy;
         float d2 = dx * dx + dy * dy;
         SDL_Log("Switch pressed: distance=%.2f, threshold=%.2f", sqrtf(d2), switch_threshold);
-        if (d2 < switch_threshold*switch_threshold || g_mode == CONTROL_CAR) {
+        if (d2 < switch_threshold * switch_threshold || g_mode == CONTROL_CAR) {
             if (g_mode == CONTROL_HUMAN) {
                 SDL_Log("Switching from HUMAN to CAR");
                 human_hide(&g_human, true);
@@ -230,9 +202,11 @@ int game_app_init(void) {
     if (!gameplay_init())
         return 0;
 
+    // Init dialogue manager and optionally start an introduction scene
+    dialogue_manager_init();
+
     // Music (looping)
-    if (!ame_audio_source_load_opus_file(
-            &g_music, APP_MUSIC_PATH, true)) {
+    if (!ame_audio_source_load_opus_file(&g_music, APP_MUSIC_PATH, true)) {
         SDL_Log("music load failed");
     }
     g_music.gain = 0.35f;
@@ -259,14 +233,8 @@ int game_app_init(void) {
     triggers_add("unlock_car_boost", dummy, 1, on_trigger_unlock, NULL);
     triggers_add("unlock_car_fly", dummy, 1, on_trigger_unlock, NULL);
 
-    // Init dialogue runtime from project-local generated scenes
-    g_dlg_scene = load_local_dialogue("introduction");
-    if (g_dlg_scene) {
-        if (ame_dialogue_runtime_init(&g_dlg_rt, g_dlg_scene, dialogue_trigger_hook, NULL)) {
-            g_dlg_active = true;
-            ame_dialogue_play_current(&g_dlg_rt);
-        }
-    }
+    // Optionally auto-start a default scene if available
+    dialogue_start_scene("introduction");
 
     human_init(&g_human);
     car_init(&g_car);
@@ -312,7 +280,7 @@ int game_app_init(void) {
     }
 
     // Spawn points.
-    gameplay_add_spawn_point(APP_DEFAULT_SPAWN_X, APP_DEFAULT_SPAWN_Y); // default spawn
+    gameplay_add_spawn_point(APP_DEFAULT_SPAWN_X, APP_DEFAULT_SPAWN_Y);  // default spawn
     car_set_position(&g_car, APP_START_CAR_X, APP_START_CAR_Y);
     human_set_position(&g_human, APP_START_HUMAN_X, APP_START_HUMAN_Y);
 
@@ -367,24 +335,16 @@ int game_app_iterate(void* appstate) {
     }
 
     // Dialogue input handling (advance or choose)
-    if (g_dlg_active) {
-        const AmeDialogueLine* ln = NULL;
-        if (ame_dialogue_current_has_choices(&g_dlg_rt)) {
+    if (dialogue_is_active()) {
+        if (dialogue_current_has_choices()) {
             for (int i = 1; i <= 9; i++) {
                 if (input_choice_edge(i)) {
-                    // Fetch current line to get option index safely
-                    const AmeDialogueLine* cur =
-                        (g_dlg_rt.scene && g_dlg_rt.current_index < g_dlg_rt.scene->line_count)
-                            ? &g_dlg_rt.scene->lines[g_dlg_rt.current_index]
-                            : NULL;
-                    if (cur && i - 1 < (int)cur->option_count) {
-                        ln = ame_dialogue_select_choice(&g_dlg_rt, cur->options[i - 1].next);
-                    }
+                    dialogue_select_choice_index(i - 1);
                     break;
                 }
             }
         } else if (input_advance_dialogue_edge()) {
-            ln = ame_dialogue_advance(&g_dlg_rt);
+            dialogue_advance();
         }
     }
 
@@ -461,11 +421,11 @@ int game_app_iterate(void* appstate) {
     // Sync active audio sources (music, car, gameplay one-shots and saws) in one batch
     AmeAudioSourceRef refs[128];
     int rc = 0;
-    refs[rc++] = (AmeAudioSourceRef){ &g_music, g_music_id };
-    refs[rc++] = (AmeAudioSourceRef){ &g_car_rear_audio, g_car_rear_audio_id };
-    refs[rc++] = (AmeAudioSourceRef){ &g_car_front_audio, g_car_front_audio_id };
+    refs[rc++] = (AmeAudioSourceRef){&g_music, g_music_id};
+    refs[rc++] = (AmeAudioSourceRef){&g_car_rear_audio, g_car_rear_audio_id};
+    refs[rc++] = (AmeAudioSourceRef){&g_car_front_audio, g_car_front_audio_id};
     // Collect gameplay-managed sources (explosions, saws, etc.)
-    rc += gameplay_collect_audio_refs(refs + rc, (int)(sizeof(refs)/sizeof(refs[0])) - rc,
+    rc += gameplay_collect_audio_refs(refs + rc, (int)(sizeof(refs) / sizeof(refs[0])) - rc,
                                       g_cam.x, g_cam.y, (float)g_w, g_cam.zoom, dt);
     ame_audio_sync_sources_refs(refs, (size_t)rc);
 
@@ -500,7 +460,7 @@ int game_app_iterate(void* appstate) {
 
     // HUD and Dialogue UI
     ui_render_hud(&g_cam, g_w, g_h, &g_car);
-    ui_render_dialogue(&g_cam, g_w, g_h, &g_dlg_rt, g_dlg_active);
+    ui_render_dialogue(&g_cam, g_w, g_h, dialogue_get_runtime(), dialogue_is_active());
 
     pipeline_end();
     SDL_GL_SwapWindow(g_window);
@@ -520,6 +480,7 @@ void game_app_quit(void* appstate, int result) {
     pipeline_shutdown();
     free_obj_map(&g_map_mesh);
     gameplay_shutdown();
+    dialogue_manager_shutdown();
     ui_shutdown();
     physics_shutdown();
     input_shutdown();
