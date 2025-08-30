@@ -97,6 +97,101 @@ static const char* COMP_FS =
     "out vec4 frag;\n"
     "void main(){ frag = texture(u_tex, v_uv); }\n";
 
+// Fullscreen snow shader (pixelated, camera + wind influenced, branchless)
+static const char* SNOW_FS =
+    "#version 450 core\n"
+    "in vec2 v_uv;\n"
+    "out vec4 frag;\n"
+    "uniform vec2 u_viewport;        // viewport size in pixels\n"
+    "uniform float u_time;           // seconds\n"
+    "uniform vec2 u_cam;             // camera x,y (world units)\n"
+    "uniform vec2 u_wind;            // wind velocity in pixels/sec (x,y)\n"
+    "uniform float u_density;        // 0..1 density\n"
+    "uniform float u_pixel_scale;    // pixelation scale (e.g., 4)\n"
+    "\n"
+    "float hash12(vec2 p){\n"
+    "  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n"
+    "  p3 += dot(p3, p3.yzx + 33.33);\n"
+    "  return fract((p3.x + p3.y) * p3.z);\n"
+    "}\n"
+    "\n"
+    "// Simple plus-shaped snowflake (clear and recognizable)\n"
+    "float flake_shape(vec2 q){\n"
+    "  // Create a simple + shape with dots\n"
+    "  float d = 100.0;\n"
+    "  // Horizontal bar\n"
+    "  d = min(d, max(abs(q.y) - 0.08, abs(q.x) - 0.6));\n"
+    "  // Vertical bar\n"
+    "  d = min(d, max(abs(q.x) - 0.08, abs(q.y) - 0.6));\n"
+    "  // Diagonal X bars (thinner)\n"
+    "  vec2 q1 = abs(q);\n"
+    "  d = min(d, abs(q1.x - q1.y) - 0.06);\n"
+    "  d = min(d, abs(q1.x + q1.y - 0.85) - 0.06);\n"
+    "  // Center dot\n"
+    "  d = min(d, length(q) - 0.15);\n"
+    "  // Corner dots\n"
+    "  d = min(d, length(q - vec2(0.5, 0.0)) - 0.1);\n"
+    "  d = min(d, length(q - vec2(-0.5, 0.0)) - 0.1);\n"
+    "  d = min(d, length(q - vec2(0.0, 0.5)) - 0.1);\n"
+    "  d = min(d, length(q - vec2(0.0, -0.5)) - 0.1);\n"
+    "  return 1.0 - smoothstep(0.0, 0.02, d);\n"
+    "}\n"
+    "\n"
+    "vec2 rot2(vec2 v, float a){ float s = sin(a), c = cos(a); return mat2(c,-s,s,c)*v; }\n"
+    "\n"
+    "void main(){\n"
+    "  // Pixelate coordinates\n"
+    "  vec2 pix = u_viewport / u_pixel_scale;\n"
+    "  vec2 uv_px = floor(v_uv * pix) / pix;\n"
+    "  vec2 p = uv_px * u_viewport; // pixel coords\n"
+    "\n"
+    "  vec2 cam_off = u_cam * 0.5;  // reduce camera influence\n"
+    "  vec2 wind_off = u_wind * u_time;\n"
+    "\n"
+    "  // Single layer for clarity (was too noisy with 3)\n"
+    "  vec2 w = p + cam_off + wind_off;\n"
+    "  float cellsize = 80.0;  // much larger cells\n"
+    "  vec2 cell = floor(w / cellsize);\n"
+    "  vec2 celluv = fract(w / cellsize);\n"
+    "  \n"
+    "  float rnd = hash12(cell + vec2(13.0, 7.0));\n"
+    "  \n"
+    "  // Only spawn in some cells\n"
+    "  float spawn = step(rnd, u_density);\n"
+    "  \n"
+    "  // Position within cell (randomized but centered)\n"
+    "  vec2 center = vec2(0.5 + (hash12(cell + vec2(23.0, 11.0)) - 0.5) * 0.3,\n"
+    "                     0.5 + (hash12(cell + vec2(31.0, 17.0)) - 0.5) * 0.3);\n"
+    "  \n"
+    "  // Local space coords\n"
+    "  vec2 local = (celluv - center) * 3.0;  // scale up the flake\n"
+    "  \n"
+    "  // Very slow rotation\n"
+    "  float rot_speed = 0.1 + rnd * 0.2;\n"
+    "  vec2 q = rot2(local, u_time * rot_speed);\n"
+    "  \n"
+    "  // Get flake shape\n"
+    "  float shape = flake_shape(q) * spawn;\n"
+    "  \n"
+    "  // Second layer (optional, farther)\n"
+    "  vec2 w2 = p + cam_off * 0.3 + wind_off * 0.6;\n"
+    "  float cellsize2 = 120.0;\n"
+    "  vec2 cell2 = floor(w2 / cellsize2);\n"
+    "  vec2 celluv2 = fract(w2 / cellsize2);\n"
+    "  float rnd2 = hash12(cell2 + vec2(53.0, 29.0));\n"
+    "  float spawn2 = step(rnd2, u_density * 0.7);\n"
+    "  vec2 center2 = vec2(0.5 + (hash12(cell2 + vec2(43.0, 19.0)) - 0.5) * 0.3,\n"
+    "                      0.5 + (hash12(cell2 + vec2(47.0, 23.0)) - 0.5) * 0.3);\n"
+    "  vec2 local2 = (celluv2 - center2) * 3.5;\n"
+    "  float rot_speed2 = 0.08 + rnd2 * 0.15;\n"
+    "  vec2 q2 = rot2(local2, u_time * rot_speed2);\n"
+    "  float shape2 = flake_shape(q2 * 1.2) * spawn2 * 0.6;  // smaller, dimmer\n"
+    "  \n"
+    "  float alpha = clamp(shape + shape2, 0.0, 1.0);\n"
+    "  vec3 col = vec3(0.98, 0.99, 1.0);  // nearly white\n"
+    "  frag = vec4(col, alpha * 0.9);\n"
+    "}\n";
+
 // Vertex format
 typedef struct {
     float x, y, u, v, r, g, b, a, par;
@@ -119,19 +214,21 @@ typedef struct {
 // Mesh batch
 typedef struct {
     const AmeLocalMesh* mesh;
-    float tx, ty, tz;     // object translation xyz
-    float sx, sy, sz;     // object scale xyz
-    float r, g, b, a;     // color
-    float depth;          // calculated depth for sorting (higher values render behind)
+    float tx, ty, tz;  // object translation xyz
+    float sx, sy, sz;  // object scale xyz
+    float r, g, b, a;  // color
+    float depth;       // calculated depth for sorting (higher values render behind)
 } MeshBatch;
 
 // Pipeline state
 static struct {
     // Shaders
-    GLuint sprite_prog, mesh_prog, comp_prog;
+    GLuint sprite_prog, mesh_prog, comp_prog, snow_prog;
     GLint sprite_u_res, sprite_u_cam, sprite_u_tex;
     GLint mesh_u_res, mesh_u_cam, mesh_u_tex;
     GLint comp_u_tex;
+    // Snow uniforms
+    GLint snow_u_viewport, snow_u_time, snow_u_cam, snow_u_wind, snow_u_density, snow_u_pixel_scale;
 
     // VAOs
     GLuint sprite_vao, sprite_vbo;
@@ -148,6 +245,9 @@ static struct {
     // Current frame state
     AmeCamera cam;
     int viewport_w, viewport_h;
+    float time_sec;        // time in seconds (from SDL)
+    float wind_x, wind_y;  // wind vector (pixels/sec)
+    float snow_density;    // 0..1
 
     // Batches
     SpriteBatch* sprite_batches;
@@ -302,6 +402,13 @@ bool pipeline_init(void) {
     glDeleteShader(comp_vs);
     glDeleteShader(comp_fs);
 
+    // Snow shader program (uses COMP_VS for fullscreen triangle)
+    GLuint snow_vs = compile_shader(GL_VERTEX_SHADER, COMP_VS);
+    GLuint snow_fs = compile_shader(GL_FRAGMENT_SHADER, SNOW_FS);
+    g_pipe.snow_prog = link_program(snow_vs, snow_fs);
+    glDeleteShader(snow_vs);
+    glDeleteShader(snow_fs);
+
     // Get uniform locations
     g_pipe.sprite_u_res = glGetUniformLocation(g_pipe.sprite_prog, "u_res");
     g_pipe.sprite_u_cam = glGetUniformLocation(g_pipe.sprite_prog, "u_cam");
@@ -312,6 +419,14 @@ bool pipeline_init(void) {
     g_pipe.mesh_u_tex = glGetUniformLocation(g_pipe.mesh_prog, "u_tex");
 
     g_pipe.comp_u_tex = glGetUniformLocation(g_pipe.comp_prog, "u_tex");
+
+    // Snow uniform locations
+    g_pipe.snow_u_viewport = glGetUniformLocation(g_pipe.snow_prog, "u_viewport");
+    g_pipe.snow_u_time = glGetUniformLocation(g_pipe.snow_prog, "u_time");
+    g_pipe.snow_u_cam = glGetUniformLocation(g_pipe.snow_prog, "u_cam");
+    g_pipe.snow_u_wind = glGetUniformLocation(g_pipe.snow_prog, "u_wind");
+    g_pipe.snow_u_density = glGetUniformLocation(g_pipe.snow_prog, "u_density");
+    g_pipe.snow_u_pixel_scale = glGetUniformLocation(g_pipe.snow_prog, "u_pixel_scale");
 
     // Create VAOs
     glGenVertexArrays(1, &g_pipe.sprite_vao);
@@ -348,7 +463,12 @@ bool pipeline_init(void) {
     // Create white texture
     create_white_texture();
 
-    return g_pipe.sprite_prog && g_pipe.mesh_prog && g_pipe.comp_prog;
+    // Defaults
+    g_pipe.wind_x = 5.0f;         // very slow horizontal drift
+    g_pipe.wind_y = 10.0f;        // slow upward drift
+    g_pipe.snow_density = 0.03f;  // very sparse - individual flakes visible
+
+    return g_pipe.sprite_prog && g_pipe.mesh_prog && g_pipe.comp_prog && g_pipe.snow_prog;
 }
 
 void pipeline_shutdown(void) {
@@ -388,6 +508,8 @@ void pipeline_shutdown(void) {
         glDeleteProgram(g_pipe.mesh_prog);
     if (g_pipe.comp_prog)
         glDeleteProgram(g_pipe.comp_prog);
+    if (g_pipe.snow_prog)
+        glDeleteProgram(g_pipe.snow_prog);
 
     memset(&g_pipe, 0, sizeof(g_pipe));
 }
@@ -442,6 +564,9 @@ void pipeline_frame_begin(const AmeCamera* cam, int viewport_w, int viewport_h) 
     if (cam)
         g_pipe.cam = *cam;
 
+    // Update time from SDL
+    g_pipe.time_sec = (float)SDL_GetTicks() / 1000.0f;
+
     // Clear batches (reuse previously allocated batches to avoid leaks and realloc thrash)
     for (size_t i = 0; i < g_pipe.sprite_batch_count; i++) {
         g_pipe.sprite_batches[i].count = 0;
@@ -455,7 +580,7 @@ void pipeline_frame_begin(const AmeCamera* cam, int viewport_w, int viewport_h) 
 }
 
 void pipeline_frame_end(void) {
-    // Execute 3-pass rendering:
+    // Execute multi-pass rendering:
     // Pass 1: Render meshes to offscreen texture (supersampled)
     pipeline_pass_meshes();
 
@@ -464,6 +589,9 @@ void pipeline_frame_end(void) {
 
     // Pass 3: Render sprites directly to screen (full resolution)
     pipeline_pass_sprites();
+
+    // Pass 4: Fullscreen pixelated snow overlay
+    pipeline_pass_snow();
 }
 
 // Sprite submission (batched by texture)
@@ -508,7 +636,7 @@ void pipeline_sprite_quad_rot(float cx,
     float x1 = cx + w * 0.5f;
     float y1 = cy + h * 0.5f;
 
-Vtx quad[6] = {{x0, y0, 0, 0, r, g, b, a, 1.0f}, {x1, y0, 1, 0, r, g, b, a, 1.0f},
+    Vtx quad[6] = {{x0, y0, 0, 0, r, g, b, a, 1.0f}, {x1, y0, 1, 0, r, g, b, a, 1.0f},
                    {x0, y1, 0, 1, r, g, b, a, 1.0f}, {x1, y0, 1, 0, r, g, b, a, 1.0f},
                    {x1, y1, 1, 1, r, g, b, a, 1.0f}, {x0, y1, 0, 1, r, g, b, a, 1.0f}};
     // Rotate all verts around center (cx, cy)
@@ -609,9 +737,11 @@ void pipeline_pass_sprites(void) {
 static int compare_triangle_depth(const void* a, const void* b) {
     const Triangle* tri_a = (const Triangle*)a;
     const Triangle* tri_b = (const Triangle*)b;
-    if (tri_a->depth < tri_b->depth) return -1; // a comes first (smaller Z behind)
-    if (tri_a->depth > tri_b->depth) return 1;  // b comes first (larger Z in front)
-    return 0; // equal depth
+    if (tri_a->depth < tri_b->depth)
+        return -1;  // a comes first (smaller Z behind)
+    if (tri_a->depth > tri_b->depth)
+        return 1;  // b comes first (larger Z in front)
+    return 0;      // equal depth
 }
 
 // Pass 2: Render meshes to offscreen texture (supersampled)
@@ -671,7 +801,8 @@ void pipeline_pass_meshes(void) {
 
         // Process triangles (groups of 3 vertices)
         for (size_t v = 0; v < mesh->count; v += 3) {
-            if (v + 2 >= mesh->count) break;  // Ensure we have a complete triangle
+            if (v + 2 >= mesh->count)
+                break;  // Ensure we have a complete triangle
 
             Triangle* tri = &triangles[tri_index++];
             float total_z = 0.0f;
@@ -679,19 +810,19 @@ void pipeline_pass_meshes(void) {
             // Process 3 vertices of the triangle
             for (int j = 0; j < 3; j++) {
                 size_t vert_idx = v + j;
-                
+
                 // Extract xyz from mesh, transform, and use xy for rendering
                 float vx = mesh->pos[vert_idx * 3 + 0];  // vertex x
                 float vy = mesh->pos[vert_idx * 3 + 1];  // vertex y
                 float vz = mesh->pos[vert_idx * 3 + 2];  // vertex z
-                
+
                 // Apply object transformation
                 float px = vx * batch->sx + batch->tx;
                 float py = vy * batch->sy + batch->ty;
                 float pz = vz * batch->sz + batch->tz;  // transformed Z for depth & parallax
-                
+
                 total_z += pz;
-                
+
                 float u = mesh->uv ? mesh->uv[vert_idx * 2 + 0] : 0.0f;
                 float uv = mesh->uv ? mesh->uv[vert_idx * 2 + 1] : 0.0f;
 
@@ -699,12 +830,14 @@ void pipeline_pass_meshes(void) {
                 // Large |Z| (far) -> near zero movement; small |Z| (near) -> ~1.0
                 float par = 1.0f / (1.0f + fabsf(pz) * PARALLAX_K);
                 // Optional cap to avoid overscaling; keep within [0, 1]
-                if (par < 0.0f) par = 0.0f;
-                if (par > 1.0f) par = 1.0f;
+                if (par < 0.0f)
+                    par = 0.0f;
+                if (par > 1.0f)
+                    par = 1.0f;
 
                 tri->verts[j] = (Vtx){px, py, u, uv, batch->r, batch->g, batch->b, batch->a, par};
             }
-            
+
             // Calculate average depth for this triangle
             tri->depth = total_z / 3.0f;
         }
@@ -718,7 +851,7 @@ void pipeline_pass_meshes(void) {
     // Render all sorted triangles
     size_t total_vertices = total_triangles * 3;
     Vtx* all_verts = malloc(total_vertices * sizeof(Vtx));
-    
+
     for (size_t i = 0; i < total_triangles; i++) {
         memcpy(&all_verts[i * 3], triangles[i].verts, 3 * sizeof(Vtx));
     }
@@ -729,9 +862,9 @@ void pipeline_pass_meshes(void) {
 
     glActiveTexture(GL_TEXTURE0);
     // Use the texture from the first mesh (assuming all share the same texture)
-    GLuint tex = (g_pipe.mesh_batch_count > 0 && g_pipe.mesh_batches[0].mesh->texture) 
-                 ? g_pipe.mesh_batches[0].mesh->texture 
-                 : g_pipe.white_tex;
+    GLuint tex = (g_pipe.mesh_batch_count > 0 && g_pipe.mesh_batches[0].mesh->texture)
+                     ? g_pipe.mesh_batches[0].mesh->texture
+                     : g_pipe.white_tex;
     glBindTexture(GL_TEXTURE_2D, tex);
 
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)total_vertices);
@@ -786,6 +919,36 @@ void pipeline_pass_composite(void) {
     // Use nearest filtering for crisp pixel look
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    glDisable(GL_BLEND);
+    glBindVertexArray(0);
+}
+
+// Pass 4: Fullscreen pixelated snow overlay
+void pipeline_pass_snow(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, g_pipe.viewport_w, g_pipe.viewport_h);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glUseProgram(g_pipe.snow_prog);
+    glBindVertexArray(g_pipe.comp_vao);
+
+    if (g_pipe.snow_u_viewport >= 0)
+        glUniform2f(g_pipe.snow_u_viewport, (float)g_pipe.viewport_w, (float)g_pipe.viewport_h);
+    if (g_pipe.snow_u_time >= 0)
+        glUniform1f(g_pipe.snow_u_time, g_pipe.time_sec);
+    if (g_pipe.snow_u_cam >= 0)
+        glUniform2f(g_pipe.snow_u_cam, g_pipe.cam.x, g_pipe.cam.y);
+    if (g_pipe.snow_u_wind >= 0)
+        glUniform2f(g_pipe.snow_u_wind, g_pipe.wind_x, g_pipe.wind_y);
+    if (g_pipe.snow_u_density >= 0)
+        glUniform1f(g_pipe.snow_u_density, g_pipe.snow_density);
+    if (g_pipe.snow_u_pixel_scale >= 0)
+        glUniform1f(g_pipe.snow_u_pixel_scale, (float)g_pipe.pixel_scale);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 

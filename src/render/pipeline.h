@@ -20,6 +20,7 @@ typedef struct {
 // Pass 1: Sprites (batched by texture, full resolution)
 // Pass 2: Meshes (rendered to offscreen texture, supersampled)
 // Pass 3: Composite (downscale mesh texture to screen)
+// Pass 4: Snow overlay (fullscreen pixelated snow)
 
 bool pipeline_init(void);
 void pipeline_shutdown(void);
@@ -67,6 +68,7 @@ void pipeline_mesh_submit(const AmeLocalMesh* mesh,
 void pipeline_pass_sprites(void);    // Render batched sprites to screen
 void pipeline_pass_meshes(void);     // Render meshes to offscreen texture
 void pipeline_pass_composite(void);  // Composite offscreen texture to screen
+void pipeline_pass_snow(void);       // Fullscreen pixelated snow overlay
 
 // Legacy compatibility (deprecated - use frame_begin/end instead)
 void pipeline_begin(const AmeCamera* cam, int viewport_w, int viewport_h);
