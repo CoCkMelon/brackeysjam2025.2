@@ -1,4 +1,5 @@
 /*
+Object must be a mesh, even if empty.
 Recognized object name keywords in OBJ shapes:
 
 Prefixes:
@@ -13,7 +14,8 @@ Prefixes:
 - "BoxCollider"         -> Static box collider from the shape's AABB
 - "CircleCollider"      -> Static circle collider from the shape's AABB radius
 - "EdgeCollider"        -> Static edge from the first two vertices
-- "ChainCollider[Loop|Closed]" -> Static chain from all vertices; closed if name contains Loop/Closed
+- "ChainCollider[Loop|Closed]" -> Static chain from all vertices; closed if name contains
+Loop/Closed
 - "MeshCollider"        -> Static triangle mesh collider from the shape's triangles
 
 Tags (substring anywhere in name):
@@ -27,9 +29,9 @@ Tags (substring anywhere in name):
 #include <cstring>
 #include <string>
 #include <vector>
+#include "gameplay.h"
 #include "physics.h"
 #include "triggers.h"
-#include "gameplay.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
@@ -62,8 +64,8 @@ static GLuint load_texture_absolute(const char* filename) {
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, conv->w, conv->h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                  conv->pixels);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     SDL_DestroySurface(conv);
@@ -126,10 +128,13 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             float h = (maxy - miny);
             Aabb box = {cx, cy, w, h};
             // Extract trigger name after the space
-            std::string trig_name = name.substr(8); // len("Trigger ") == 8
+            std::string trig_name = name.substr(8);  // len("Trigger ") == 8
             // Allocate payload with center to pass to callback
             GameplayTriggerUser* u = (GameplayTriggerUser*)malloc(sizeof(GameplayTriggerUser));
-            if (u) { u->x = cx; u->y = cy; }
+            if (u) {
+                u->x = cx;
+                u->y = cy;
+            }
             // Not once: can keep firing when overlapped
             triggers_add(trig_name.c_str(), box, 0, gameplay_on_trigger, (void*)u);
             continue;
@@ -145,7 +150,10 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             Aabb box = {cx, cy, w, h};
             // Allocate payload with center to pass to callback
             GameplayTriggerUser* u = (GameplayTriggerUser*)malloc(sizeof(GameplayTriggerUser));
-            if (u) { u->x = cx; u->y = cy; }
+            if (u) {
+                u->x = cx;
+                u->y = cy;
+            }
             // Not once: can keep firing when overlapped
             triggers_add(name.c_str(), box, 0, gameplay_on_trigger, (void*)u);
             continue;
@@ -167,10 +175,11 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             float cy = 0.5f * (miny + maxy);
             // Try to parse amount after prefix, e.g., Fuel50
             float amount = 25.0f;
-            const char* p = name.c_str() + 4; // after "Fuel"
+            const char* p = name.c_str() + 4;  // after "Fuel"
             if (*p) {
                 int val = atoi(p);
-                if (val > 0) amount = (float)val;
+                if (val > 0)
+                    amount = (float)val;
             }
             spawn_fuel_pickup(cx, cy, amount);
             continue;
@@ -186,19 +195,24 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             float cy = 0.5f * (miny + maxy);
             float w = (maxx - minx);
             float h = (maxy - miny);
-            if (has_tag(name, "Spike")){
-                // Create spike collider from this shape's triangles with spike flag; keep visual mesh
+            if (has_tag(name, "Spike")) {
+                // Create spike collider from this shape's triangles with spike flag; keep visual
+                // mesh
                 if (xs.size() >= 3) {
                     std::vector<float> tri;
                     tri.reserve(xs.size() * 2);
-                    for (size_t i = 0; i < xs.size(); ++i) { tri.push_back(xs[i]); tri.push_back(ys[i]); }
-                    physics_create_static_mesh_triangles_tagged(tri.data(), (int)xs.size(), 0.8f, PHYS_FLAG_SPIKE);
+                    for (size_t i = 0; i < xs.size(); ++i) {
+                        tri.push_back(xs[i]);
+                        tri.push_back(ys[i]);
+                    }
+                    physics_create_static_mesh_triangles_tagged(tri.data(), (int)xs.size(), 0.8f,
+                                                                PHYS_FLAG_SPIKE);
                 }
                 // do not continue; allow visual geometry accumulation
             } else {
                 float r = 0.5f * fminf(w, h);
                 gameplay_spawn_saw(cx, cy, r > 2.0f ? r : 6.0f);
-                continue; // saw uses sprite, not visual mesh
+                continue;  // saw uses sprite, not visual mesh
             }
         }
         if (has_prefix(name, "BoxCollider")) {
@@ -305,7 +319,8 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
         memcpy(pos, vis.data(), vis.size() * sizeof(float));
         out_mesh->pos = pos;
         out_mesh->count = (unsigned int)(vis.size() / 3);  // xyz triplets
-        if (uvs.size() == vis.size() / 3 * 2) {  // uvs are still pairs, so vis.size()/3*2 pairs expected
+        if (uvs.size() ==
+            vis.size() / 3 * 2) {  // uvs are still pairs, so vis.size()/3*2 pairs expected
             float* uv = (float*)malloc(uvs.size() * sizeof(float));
             memcpy(uv, uvs.data(), uvs.size() * sizeof(float));
             out_mesh->uv = uv;

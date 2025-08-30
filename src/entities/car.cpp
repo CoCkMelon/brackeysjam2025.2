@@ -128,7 +128,8 @@ void car_init(Car* c) {
         b2FixtureDef fd;
         fd.shape = &chassis;
         fd.density = 1.0f;
-        fd.friction = 0.4f;
+        // Lower friction to make the car body more slippery on surfaces
+        fd.friction = 0.1f;
         c->body->CreateFixture(&fd);
     }
     // wheels
@@ -208,10 +209,11 @@ void car_fixed(Car* c, float dt) {
     float boost = (g_abilities.car_boost && input_boost_down()) ? c->cfg.boost_mul : 1.0f;
     // Fuel consumption: only when applying acceleration or boosting
     if (accel != 0) {
-        float base_use = 10.0f; // units per second at full throttle
+        float base_use = 10.0f;  // units per second at full throttle
         float use = base_use * (boost > 1.0f ? 1.5f : 1.0f) * dt;
         c->fuel -= use;
-        if (c->fuel < 0.0f) c->fuel = 0.0f;
+        if (c->fuel < 0.0f)
+            c->fuel = 0.0f;
     }
     // If out of fuel, disable motors regardless of input
     float speed = (c->fuel > 0.0f) ? (-c->cfg.motor_speed * boost * (float)accel) : 0.0f;
@@ -242,11 +244,16 @@ void car_fixed(Car* c, float dt) {
 
 void car_update(Car* c, float dt) {
     (void)dt;
-    if (!c) return;
-    if (c->body->GetPosition().y < -10000) c->hp = 0;
-    if (c->hp < 0.0f) c->hp = 0.0f;
-    if (c->fuel < 0.0f) c->fuel = 0.0f;
-    if (c->fuel > c->max_fuel) c->fuel = c->max_fuel;
+    if (!c)
+        return;
+    if (c->body->GetPosition().y < -10000)
+        c->hp = 0;
+    if (c->hp < 0.0f)
+        c->hp = 0.0f;
+    if (c->fuel < 0.0f)
+        c->fuel = 0.0f;
+    if (c->fuel > c->max_fuel)
+        c->fuel = c->max_fuel;
 }
 
 void car_render(const Car* c) {
@@ -332,9 +339,11 @@ float car_get_front_wheel_angular_speed(const Car* c) {
 }
 
 void car_apply_damage(Car* c, float dmg) {
-    if (!c) return;
+    if (!c)
+        return;
     c->hp -= dmg;
-    if (c->hp < 0.0f) c->hp = 0.0f;
+    if (c->hp < 0.0f)
+        c->hp = 0.0f;
     SDL_Log("Car HP: %.1f / %.1f", c->hp, c->max_hp);
     if (c->hp == 0.0f) {
         SDL_Log("Car destroyed");
@@ -342,7 +351,9 @@ void car_apply_damage(Car* c, float dmg) {
 }
 
 void car_refuel(Car* c, float amount) {
-    if (!c) return;
+    if (!c)
+        return;
     c->fuel += amount;
-    if (c->fuel > c->max_fuel) c->fuel = c->max_fuel;
+    if (c->fuel > c->max_fuel)
+        c->fuel = c->max_fuel;
 }
