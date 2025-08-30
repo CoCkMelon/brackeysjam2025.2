@@ -23,6 +23,9 @@ bool input_quit_requested(void);  // ESC
 bool input_advance_dialogue_edge(void);    // Space or Enter edge
 bool input_choice_edge(int index_1_to_9);  // Number keys 1..9 edge
 
+// Misc
+bool input_restart_edge(void);  // R key edge
+
 #ifdef __cplusplus
 }
 #endif

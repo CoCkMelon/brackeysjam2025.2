@@ -79,12 +79,24 @@ else()
   FetchContent_MakeAvailable(ame_engine)
 endif()
 
+# Generate dialogues from YAML files
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_custom_command(
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/embedded_dialogues_gen.c ${CMAKE_SOURCE_DIR}/src/dialogue_generated.h
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/dialogue_yaml_to_c.py ${CMAKE_SOURCE_DIR}/dialogues ${CMAKE_SOURCE_DIR}/src
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/dialogue_yaml_to_c.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Generating dialogues from YAML files"
+)
+
 # Game executable (multi-file C with one C++ TU for tinyobjloader)
 file(GLOB_RECURSE GAME_SOURCES
   CONFIGURE_DEPENDS
   src/*.c
   src/*.cpp
 )
+# Add generated dialogue files
+list(APPEND GAME_SOURCES ${CMAKE_SOURCE_DIR}/src/embedded_dialogues_gen.c)
 add_executable(game ${GAME_SOURCES})
 set_property(TARGET game PROPERTY LINKER_LANGUAGE CXX)
 # Keep SDL3 callbacks main style like example
@@ -111,6 +123,7 @@ set(_ame_targets
   Threads::Threads
   ame
   SDL3_image::SDL3_image
+  SDL3_ttf::SDL3_ttf
   glad
   box2d
 )
@@ -120,6 +133,29 @@ foreach(tgt IN LISTS _ame_targets)
     message(STATUS "Linking game against: ${tgt}")
   endif()
 endforeach()
+
+# Also try to link against SDL3_ttf for systems where SDL_ttf is provided as SDL3
+# Prefer pkg-config if available to pick up proper include and library paths
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(SDL3TTF QUIET sdl3_ttf)
+  if(SDL3TTF_FOUND)
+    message(STATUS "Found SDL3_ttf via pkg-config: ${SDL3TTF_VERSION}")
+    target_include_directories(game PRIVATE ${SDL3TTF_INCLUDE_DIRS})
+    if(SDL3TTF_LIBRARY_DIRS)
+      target_link_directories(game PRIVATE ${SDL3TTF_LIBRARY_DIRS})
+    endif()
+    target_link_libraries(game PRIVATE ${SDL3TTF_LIBRARIES})
+  else()
+    # Fallback to linking by name; many distros provide -lSDL3_ttf
+    message(STATUS "pkg-config sdl3_ttf not found; linking SDL3_ttf by name")
+    target_link_libraries(game PRIVATE SDL3_ttf)
+  endif()
+else()
+  # If pkg-config isn't available, try a simple link by name
+  message(STATUS "PkgConfig not found; linking SDL3_ttf by name")
+  target_link_libraries(game PRIVATE SDL3_ttf)
+endif()
 
 # Avoid accidental linkage against unitylike/flecs if present in the superproject
 if(TARGET unitylike)

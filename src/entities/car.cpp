@@ -76,6 +76,8 @@ void car_init(Car* c) {
     memset(c, 0, sizeof(*c));
     c->max_hp = 200.0f;
     c->hp = c->max_hp;
+    c->max_fuel = 10000.0f;
+    c->fuel = c->max_fuel;
     // Defaults similar to reference
     c->cfg.body_w = 35.0f;
     c->cfg.body_h = 20.0f;
@@ -204,7 +206,15 @@ void car_fixed(Car* c, float dt) {
     int accel = input_accel_dir();
     int yaw = input_yaw_dir();
     float boost = (g_abilities.car_boost && input_boost_down()) ? c->cfg.boost_mul : 1.0f;
-    float speed = -c->cfg.motor_speed * boost * (float)accel;
+    // Fuel consumption: only when applying acceleration or boosting
+    if (accel != 0) {
+        float base_use = 10.0f; // units per second at full throttle
+        float use = base_use * (boost > 1.0f ? 1.5f : 1.0f) * dt;
+        c->fuel -= use;
+        if (c->fuel < 0.0f) c->fuel = 0.0f;
+    }
+    // If out of fuel, disable motors regardless of input
+    float speed = (c->fuel > 0.0f) ? (-c->cfg.motor_speed * boost * (float)accel) : 0.0f;
     physics_lock();
     if (c->joint_b) {
         c->joint_b->EnableMotor(true);
@@ -233,7 +243,10 @@ void car_fixed(Car* c, float dt) {
 void car_update(Car* c, float dt) {
     (void)dt;
     if (!c) return;
+    if (c->body->GetPosition().y < -10000) c->hp = 0;
     if (c->hp < 0.0f) c->hp = 0.0f;
+    if (c->fuel < 0.0f) c->fuel = 0.0f;
+    if (c->fuel > c->max_fuel) c->fuel = c->max_fuel;
 }
 
 void car_render(const Car* c) {
@@ -326,4 +339,10 @@ void car_apply_damage(Car* c, float dmg) {
     if (c->hp == 0.0f) {
         SDL_Log("Car destroyed");
     }
+}
+
+void car_refuel(Car* c, float amount) {
+    if (!c) return;
+    c->fuel += amount;
+    if (c->fuel > c->max_fuel) c->fuel = c->max_fuel;
 }

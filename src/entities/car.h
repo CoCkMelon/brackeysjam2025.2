@@ -39,6 +39,9 @@ typedef struct {
     // Health
     float max_hp;
     float hp;
+    // Fuel
+    float max_fuel;
+    float fuel;
     // Simple textures (optional)
     GLuint tex_body;
     GLuint tex_wheel;
@@ -62,6 +65,9 @@ float car_get_motor_speed(const Car* c);
 
 // Damage helper
 void car_apply_damage(Car* c, float dmg);
+
+// Fuel helpers
+void car_refuel(Car* c, float amount);
 
 #ifdef __cplusplus
 }

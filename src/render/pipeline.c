@@ -102,12 +102,11 @@ static const char* SNOW_FS =
     "#version 450 core\n"
     "in vec2 v_uv;\n"
     "out vec4 frag;\n"
-    "uniform vec2 u_viewport;        // viewport size in pixels\n"
-    "uniform float u_time;           // seconds\n"
-    "uniform vec2 u_cam;             // camera x,y (world units)\n"
-    "uniform vec2 u_wind;            // wind velocity in pixels/sec (x,y)\n"
-    "uniform float u_density;        // 0..1 density\n"
-    "uniform float u_pixel_scale;    // pixelation scale (e.g., 4)\n"
+    "uniform vec2 u_viewport;\n"
+    "uniform float u_time;\n"
+    "uniform vec2 u_cam;\n"
+    "uniform vec2 u_wind;\n"
+    "uniform float u_density;\n"
     "\n"
     "float hash12(vec2 p){\n"
     "  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n"
@@ -115,80 +114,127 @@ static const char* SNOW_FS =
     "  return fract((p3.x + p3.y) * p3.z);\n"
     "}\n"
     "\n"
-    "// Simple plus-shaped snowflake (clear and recognizable)\n"
-    "float flake_shape(vec2 q){\n"
-    "  // Create a simple + shape with dots\n"
+    "vec2 hash22(vec2 p){\n"
+    "  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));\n"
+    "  p3 += dot(p3, p3.yzx + 33.33);\n"
+    "  return fract((p3.xx + p3.yz) * p3.zy);\n"
+    "}\n"
+    "\n"
+    "// Proper hexagonal snowflake with 6-fold symmetry\n"
+    "float flake_shape(vec2 q, float t, vec2 rnd){\n"
+    "  // Apply 6-fold symmetry for hexagonal structure\n"
+    "  float angle = atan(q.y, q.x);\n"
+    "  float r = length(q);\n"
+    "  // Fold into 60-degree wedge\n"
+    "  angle = abs(mod(angle + 3.14159, 1.0471975512) - 0.523598776); // PI/6 wedge\n"
+    "  q = vec2(cos(angle), sin(angle)) * r;\n"
+    "  \n"
     "  float d = 100.0;\n"
-    "  // Horizontal bar\n"
-    "  d = min(d, max(abs(q.y) - 0.08, abs(q.x) - 0.6));\n"
-    "  // Vertical bar\n"
-    "  d = min(d, max(abs(q.x) - 0.08, abs(q.y) - 0.6));\n"
-    "  // Diagonal X bars (thinner)\n"
-    "  vec2 q1 = abs(q);\n"
-    "  d = min(d, abs(q1.x - q1.y) - 0.06);\n"
-    "  d = min(d, abs(q1.x + q1.y - 0.85) - 0.06);\n"
-    "  // Center dot\n"
-    "  d = min(d, length(q) - 0.15);\n"
-    "  // Corner dots\n"
-    "  d = min(d, length(q - vec2(0.5, 0.0)) - 0.1);\n"
-    "  d = min(d, length(q - vec2(-0.5, 0.0)) - 0.1);\n"
-    "  d = min(d, length(q - vec2(0.0, 0.5)) - 0.1);\n"
-    "  d = min(d, length(q - vec2(0.0, -0.5)) - 0.1);\n"
+    "  \n"
+    "  // Main hexagonal arm (straight out from center)\n"
+    "  float arm_width = 0.03 + rnd.x * 0.02;\n"
+    "  float arm_length = 0.6 + rnd.y * 0.15;\n"
+    "  // Taper the arm\n"
+    "  float taper = 1.0 - smoothstep(0.0, arm_length, q.x) * 0.5;\n"
+    "  d = min(d, max(abs(q.y) - arm_width * taper, q.x - arm_length));\n"
+    "  \n"
+    "  // Hexagonal branches at 60-degree angles\n"
+    "  // Branch 1 - closer to center\n"
+    "  vec2 b1_pos = vec2(0.2, 0.0);\n"
+    "  vec2 q1 = q - b1_pos;\n"
+    "  // Rotate by 60 degrees for hexagonal pattern\n"
+    "  q1 = vec2(q1.x * 0.5 - q1.y * 0.866, q1.x * 0.866 + q1.y * 0.5);\n"
+    "  float b1_len = 0.15 + rnd.x * 0.05;\n"
+    "  d = min(d, max(abs(q1.y) - 0.02, q1.x - b1_len));\n"
+    "  // Opposite branch\n"
+    "  q1 = q - b1_pos;\n"
+    "  q1 = vec2(q1.x * 0.5 + q1.y * 0.866, -q1.x * 0.866 + q1.y * 0.5);\n"
+    "  d = min(d, max(abs(q1.y) - 0.02, q1.x - b1_len));\n"
+    "  \n"
+    "  // Branch 2 - middle\n"
+    "  vec2 b2_pos = vec2(0.35, 0.0);\n"
+    "  vec2 q2 = q - b2_pos;\n"
+    "  q2 = vec2(q2.x * 0.5 - q2.y * 0.866, q2.x * 0.866 + q2.y * 0.5);\n"
+    "  float b2_len = 0.12 + rnd.y * 0.04;\n"
+    "  d = min(d, max(abs(q2.y) - 0.018, q2.x - b2_len));\n"
+    "  q2 = q - b2_pos;\n"
+    "  q2 = vec2(q2.x * 0.5 + q2.y * 0.866, -q2.x * 0.866 + q2.y * 0.5);\n"
+    "  d = min(d, max(abs(q2.y) - 0.018, q2.x - b2_len));\n"
+    "  \n"
+    "  // Branch 3 - outer\n"
+    "  vec2 b3_pos = vec2(0.5, 0.0);\n"
+    "  vec2 q3 = q - b3_pos;\n"
+    "  q3 = vec2(q3.x * 0.5 - q3.y * 0.866, q3.x * 0.866 + q3.y * 0.5);\n"
+    "  float b3_len = 0.08 + rnd.x * 0.03;\n"
+    "  d = min(d, max(abs(q3.y) - 0.015, q3.x - b3_len));\n"
+    "  q3 = q - b3_pos;\n"
+    "  q3 = vec2(q3.x * 0.5 + q3.y * 0.866, -q3.x * 0.866 + q3.y * 0.5);\n"
+    "  d = min(d, max(abs(q3.y) - 0.015, q3.x - b3_len));\n"
+    "  \n"
+    "  // Hexagonal center\n"
+    "  float hex_size = 0.08 + rnd.y * 0.02;\n"
+    "  vec2 qh = abs(q);\n"
+    "  float hex = max(qh.x * 0.866 + qh.y * 0.5, qh.y) - hex_size;\n"
+    "  d = min(d, hex);\n"
+    "  \n"
+    "  // Small decorative tips\n"
+    "  d = min(d, length(q - vec2(arm_length - 0.03, 0.0)) - 0.03);\n"
+    "  \n"
+    "  // Add fine details - smaller branches\n"
+    "  vec2 b4_pos = vec2(0.15, 0.0);\n"
+    "  vec2 q4 = q - b4_pos;\n"
+    "  q4 = vec2(q4.x * 0.5 - q4.y * 0.866, q4.x * 0.866 + q4.y * 0.5);\n"
+    "  d = min(d, max(abs(q4.y) - 0.01, max(q4.x - 0.06, -q4.x - 0.01)));\n"
+    "  \n"
     "  return 1.0 - smoothstep(0.0, 0.02, d);\n"
     "}\n"
     "\n"
     "vec2 rot2(vec2 v, float a){ float s = sin(a), c = cos(a); return mat2(c,-s,s,c)*v; }\n"
     "\n"
     "void main(){\n"
-    "  // Pixelate coordinates\n"
-    "  vec2 pix = u_viewport / u_pixel_scale;\n"
-    "  vec2 uv_px = floor(v_uv * pix) / pix;\n"
-    "  vec2 p = uv_px * u_viewport; // pixel coords\n"
+    "  vec2 p = v_uv * u_viewport;\n"
     "\n"
-    "  vec2 cam_off = u_cam * 0.5;  // reduce camera influence\n"
+    "  vec2 cam_off = u_cam * 0.5;\n"
     "  vec2 wind_off = u_wind * u_time;\n"
     "\n"
-    "  // Single layer for clarity (was too noisy with 3)\n"
+    "  // Layer 1 - foreground\n"
     "  vec2 w = p + cam_off + wind_off;\n"
-    "  float cellsize = 80.0;  // much larger cells\n"
+    "  float cellsize = 80.0;\n"
     "  vec2 cell = floor(w / cellsize);\n"
     "  vec2 celluv = fract(w / cellsize);\n"
     "  \n"
-    "  float rnd = hash12(cell + vec2(13.0, 7.0));\n"
+    "  vec2 rnd = hash22(cell + vec2(13.0, 7.0));\n"
+    "  float spawn = step(rnd.x, u_density);\n"
     "  \n"
-    "  // Only spawn in some cells\n"
-    "  float spawn = step(rnd, u_density);\n"
+    "  vec2 center = vec2(0.5) + (hash22(cell + vec2(23.0, 11.0)) - 0.5) * 0.3;\n"
+    "  vec2 local = (celluv - center) * 3.0;\n"
     "  \n"
-    "  // Position within cell (randomized but centered)\n"
-    "  vec2 center = vec2(0.5 + (hash12(cell + vec2(23.0, 11.0)) - 0.5) * 0.3,\n"
-    "                     0.5 + (hash12(cell + vec2(31.0, 17.0)) - 0.5) * 0.3);\n"
+    "  // Z-axis rotation\n"
+    "  float rot_speed = 0.3 + rnd.y * 0.4;\n"
+    "  float rotation = u_time * rot_speed + rnd.x * 6.28;\n"
+    "  vec2 q = rot2(local, rotation);\n"
     "  \n"
-    "  // Local space coords\n"
-    "  vec2 local = (celluv - center) * 3.0;  // scale up the flake\n"
+    "  // Animated flake with 3D tilt\n"
+    "  float anim_offset = hash12(cell + vec2(41.0, 37.0)) * 6.28;\n"
+    "  float shape = flake_shape(q, u_time + anim_offset, rnd) * spawn;\n"
     "  \n"
-    "  // Very slow rotation\n"
-    "  float rot_speed = 0.1 + rnd * 0.2;\n"
-    "  vec2 q = rot2(local, u_time * rot_speed);\n"
-    "  \n"
-    "  // Get flake shape\n"
-    "  float shape = flake_shape(q) * spawn;\n"
-    "  \n"
-    "  // Second layer (optional, farther)\n"
+    "  // Layer 2 - background\n"
     "  vec2 w2 = p + cam_off * 0.3 + wind_off * 0.6;\n"
     "  float cellsize2 = 120.0;\n"
     "  vec2 cell2 = floor(w2 / cellsize2);\n"
     "  vec2 celluv2 = fract(w2 / cellsize2);\n"
-    "  float rnd2 = hash12(cell2 + vec2(53.0, 29.0));\n"
-    "  float spawn2 = step(rnd2, u_density * 0.7);\n"
-    "  vec2 center2 = vec2(0.5 + (hash12(cell2 + vec2(43.0, 19.0)) - 0.5) * 0.3,\n"
-    "                      0.5 + (hash12(cell2 + vec2(47.0, 23.0)) - 0.5) * 0.3);\n"
-    "  vec2 local2 = (celluv2 - center2) * 3.5;\n"
-    "  float rot_speed2 = 0.08 + rnd2 * 0.15;\n"
-    "  vec2 q2 = rot2(local2, u_time * rot_speed2);\n"
-    "  float shape2 = flake_shape(q2 * 1.2) * spawn2 * 0.6;  // smaller, dimmer\n"
+    "  vec2 rnd2 = hash22(cell2 + vec2(53.0, 29.0));\n"
+    "  float spawn2 = step(rnd2.x, u_density * 0.7);\n"
+    "  vec2 center2 = vec2(0.5) + (hash22(cell2 + vec2(43.0, 19.0)) - 0.5) * 0.3;\n"
+    "  vec2 local2 = (celluv2 - center2) * 4.0;\n"
+    "  float rot_speed2 = 0.2 + rnd2.y * 0.3;\n"
+    "  float rotation2 = u_time * rot_speed2 + rnd2.x * 6.28;\n"
+    "  vec2 q2 = rot2(local2, rotation2);\n"
+    "  float anim_offset2 = hash12(cell2 + vec2(61.0, 67.0)) * 6.28;\n"
+    "  float shape2 = flake_shape(q2 * 1.3, u_time * 0.7 + anim_offset2, rnd2) * spawn2 * 0.5;\n"
     "  \n"
     "  float alpha = clamp(shape + shape2, 0.0, 1.0);\n"
-    "  vec3 col = vec3(0.98, 0.99, 1.0);  // nearly white\n"
+    "  vec3 col = vec3(0.98, 0.99, 1.0);\n"
     "  frag = vec4(col, alpha * 0.9);\n"
     "}\n";
 
@@ -589,9 +635,6 @@ void pipeline_frame_end(void) {
 
     // Pass 3: Render sprites directly to screen (full resolution)
     pipeline_pass_sprites();
-
-    // Pass 4: Fullscreen pixelated snow overlay
-    pipeline_pass_snow();
 }
 
 // Sprite submission (batched by texture)
@@ -882,10 +925,19 @@ void pipeline_pass_meshes(void) {
 
 // Pass 3: Composite offscreen texture to screen (downscaled)
 void pipeline_pass_composite(void) {
-    // First, downsample mesh texture to pixel buffer
+    // First, downsample mesh texture to pixel buffer and composite with snow
     glBindFramebuffer(GL_FRAMEBUFFER, g_pipe.pixel_fbo);
     glViewport(0, 0, g_pipe.pixel_w, g_pipe.pixel_h);
 
+    // Clear the pixel buffer to transparent
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Enable blending for compositing
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Render mesh texture to pixel buffer (downsampling)
     glUseProgram(g_pipe.comp_prog);
     glBindVertexArray(g_pipe.comp_vao);
 
@@ -902,16 +954,39 @@ void pipeline_pass_composite(void) {
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    // Now composite pixel buffer to screen
+    // Now render snowflakes into the same pixel buffer (additive over meshes)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);  // Additive blending for snow
+
+    glUseProgram(g_pipe.snow_prog);
+    glBindVertexArray(g_pipe.comp_vao);
+    if (g_pipe.snow_u_viewport >= 0) glUniform2f(g_pipe.snow_u_viewport, (float)g_pipe.pixel_w, (float)g_pipe.pixel_h);
+    if (g_pipe.snow_u_time >= 0) glUniform1f(g_pipe.snow_u_time, g_pipe.time_sec);
+    if (g_pipe.snow_u_cam >= 0) glUniform2f(g_pipe.snow_u_cam, g_pipe.cam.x, g_pipe.cam.y);
+    if (g_pipe.snow_u_wind >= 0) glUniform2f(g_pipe.snow_u_wind, g_pipe.wind_x, g_pipe.wind_y);
+    if (g_pipe.snow_u_density >= 0) glUniform1f(g_pipe.snow_u_density, g_pipe.snow_density);
+    if (g_pipe.snow_u_pixel_scale >= 0) glUniform1f(g_pipe.snow_u_pixel_scale, (float)g_pipe.pixel_scale);
+
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisable(GL_BLEND);
+
+    // Now composite the final low-res pixel buffer (containing both meshes and snow) to screen
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, g_pipe.viewport_w, g_pipe.viewport_h);
 
-    // Clear screen
+    // Clear screen to background color
     glClearColor(0.2f, 0.3f, 0.5f, 1.0f);  // Sky blue background
     glClear(GL_COLOR_BUFFER_BIT);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Use the composite program to render the final texture to screen
+    glUseProgram(g_pipe.comp_prog);
+    glBindVertexArray(g_pipe.comp_vao);
+
+    if (g_pipe.comp_u_tex >= 0) {
+        glUniform1i(g_pipe.comp_u_tex, 0);
+    }
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_pipe.pixel_tex);
@@ -925,30 +1000,25 @@ void pipeline_pass_composite(void) {
     glDisable(GL_BLEND);
     glBindVertexArray(0);
 }
-
-// Pass 4: Fullscreen pixelated snow overlay
+// Snow overlay helper (kept for compatibility, now targets pixel buffer by default)
 void pipeline_pass_snow(void) {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, g_pipe.viewport_w, g_pipe.viewport_h);
+    // Render into pixel buffer (low resolution) for performance
+    glBindFramebuffer(GL_FRAMEBUFFER, g_pipe.pixel_fbo);
+    glViewport(0, 0, g_pipe.pixel_w, g_pipe.pixel_h);
 
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // Additive blending so snow enhances underlying pixels instead of overriding
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
     glUseProgram(g_pipe.snow_prog);
     glBindVertexArray(g_pipe.comp_vao);
 
-    if (g_pipe.snow_u_viewport >= 0)
-        glUniform2f(g_pipe.snow_u_viewport, (float)g_pipe.viewport_w, (float)g_pipe.viewport_h);
-    if (g_pipe.snow_u_time >= 0)
-        glUniform1f(g_pipe.snow_u_time, g_pipe.time_sec);
-    if (g_pipe.snow_u_cam >= 0)
-        glUniform2f(g_pipe.snow_u_cam, g_pipe.cam.x, g_pipe.cam.y);
-    if (g_pipe.snow_u_wind >= 0)
-        glUniform2f(g_pipe.snow_u_wind, g_pipe.wind_x, g_pipe.wind_y);
-    if (g_pipe.snow_u_density >= 0)
-        glUniform1f(g_pipe.snow_u_density, g_pipe.snow_density);
-    if (g_pipe.snow_u_pixel_scale >= 0)
-        glUniform1f(g_pipe.snow_u_pixel_scale, (float)g_pipe.pixel_scale);
+    if (g_pipe.snow_u_viewport >= 0) glUniform2f(g_pipe.snow_u_viewport, (float)g_pipe.pixel_w, (float)g_pipe.pixel_h);
+    if (g_pipe.snow_u_time >= 0) glUniform1f(g_pipe.snow_u_time, g_pipe.time_sec);
+    if (g_pipe.snow_u_cam >= 0) glUniform2f(g_pipe.snow_u_cam, g_pipe.cam.x, g_pipe.cam.y);
+    if (g_pipe.snow_u_wind >= 0) glUniform2f(g_pipe.snow_u_wind, g_pipe.wind_x, g_pipe.wind_y);
+    if (g_pipe.snow_u_density >= 0) glUniform1f(g_pipe.snow_u_density, g_pipe.snow_density);
+    if (g_pipe.snow_u_pixel_scale >= 0) glUniform1f(g_pipe.snow_u_pixel_scale, (float)g_pipe.pixel_scale);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 

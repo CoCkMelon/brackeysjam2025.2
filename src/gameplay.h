@@ -40,12 +40,16 @@ void spawn_grenade(float x, float y, float vx, float vy, float fuse_sec);
 void spawn_mine(float x, float y);
 void spawn_turret(float x, float y);
 void spawn_rocket(float x, float y, float vx, float vy, float life_sec);
+void spawn_fuel_pickup(float x, float y, float amount);
 
 // Trigger integration
 void gameplay_on_trigger(const char* name, void* user);
 
 // Spawn points
 void gameplay_add_spawn_point(float x, float y);
+
+// Restart helpers
+void gameplay_restart(Human* human, Car* car);
 
 // (Spike hazards handled via collider flags; no AABB registration)
 
@@ -74,6 +78,11 @@ void gameplay_add_spawn_point(float x, float y);
 
 // Saw entity (circle collider that spins fast)
 void gameplay_spawn_saw(float x, float y, float radius);
+
+// Spawn activation proximity radius (when car is near a spawn point it becomes active)
+#ifndef GAME_SPAWN_ACTIVATE_RADIUS
+#define GAME_SPAWN_ACTIVATE_RADIUS 200.0f
+#endif
 
 #ifdef __cplusplus
 }

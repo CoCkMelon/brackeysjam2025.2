@@ -221,3 +221,7 @@ bool input_choice_edge(int index_1_to_9) {
     return atomic_exchange(&edge_num[index_1_to_9], 0) != 0;
 }
 
+bool input_restart_edge(void) {
+    return atomic_exchange(&edge_r, 0) != 0;
+}
+

@@ -10,6 +10,7 @@
 #include "ame/audio.h"
 #include "ame/camera.h"
 #include "ame_dialogue.h"
+#include "dialogue_generated.h"
 #include "entities/car.h"
 #include "entities/human.h"
 #include "input.h"
@@ -19,10 +20,12 @@
 #include "render/pipeline.h"
 #include "triggers.h"
 #include "gameplay.h"
+#include "ui.h"
+#include "config.h"
 
 static SDL_Window* g_window = NULL;
 static SDL_GLContext g_gl = NULL;
-static int g_w = 1280, g_h = 720;
+static int g_w = APP_DEFAULT_WIDTH, g_h = APP_DEFAULT_HEIGHT;
 
 static AmeCamera g_cam;
 static atomic_bool g_should_quit = false;
@@ -33,7 +36,7 @@ static const AmeDialogueScene* g_dlg_scene = NULL;
 static bool g_dlg_active = false;
 
 typedef enum { CONTROL_HUMAN, CONTROL_CAR } ControlMode;
-static ControlMode g_mode = CONTROL_HUMAN;
+static ControlMode g_mode = CONTROL_CAR;
 
 static Human g_human;
 static Car g_car;
@@ -52,10 +55,10 @@ static AmeLocalMesh g_map_mesh = {0};
 
 static SDL_Thread* g_logic_thread = NULL;
 static atomic_bool g_logic_running = false;
-static const float kFixedDt = 0.001f;  // 1000 Hz
+static const float kFixedDt = APP_FIXED_DT;  // from config
 
 // #define MAP_OBJ_NAME "test dimensions.obj"
-#define MAP_OBJ_NAME "car_village.obj"
+#define MAP_OBJ_NAME APP_MAP_OBJ_NAME
 
 static void set_viewport(int w, int h) {
     glViewport(0, 0, w, h);
@@ -69,7 +72,7 @@ static int init_gl(void) {
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
     g_window =
-        SDL_CreateWindow("Sidescroller Racer", g_w, g_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        SDL_CreateWindow(APP_WINDOW_TITLE, g_w, g_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (!g_window) {
         SDL_Log("window: %s", SDL_GetError());
         return 0;
@@ -83,10 +86,16 @@ static int init_gl(void) {
         SDL_Log("glad fail");
         return 0;
     }
+    // Ensure backface culling is disabled globally
+    glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Init UI subsystem (fonts)
+    ui_init();
+
     set_viewport(g_w, g_h);
     return 1;
 }
@@ -100,6 +109,19 @@ static void shutdown_gl(void) {
         SDL_DestroyWindow(g_window);
         g_window = NULL;
     }
+}
+
+// Local dialogue loader (searches project's generated scenes)
+static const AmeDialogueScene* load_local_dialogue(const char* name) {
+    if (!name) return NULL;
+    
+    for (size_t i = 0; i < ame__generated_scenes_count; i++) {
+        const AmeDialogueScene* scene = ame__generated_scenes[i];
+        if (scene && scene->scene && SDL_strcmp(scene->scene, name) == 0) {
+            return scene;
+        }
+    }
+    return NULL;
 }
 
 // Dialogue trigger hook: forward to our trigger manager by name
@@ -193,7 +215,7 @@ int game_app_init(void) {
     if (!init_gl())
         return 0;
     ame_camera_init(&g_cam);
-    g_cam.zoom = 3.0f;
+    g_cam.zoom = APP_DEFAULT_ZOOM;
     ame_camera_set_viewport(&g_cam, g_w, g_h);
     if (!input_init())
         return 0;
@@ -210,7 +232,7 @@ int game_app_init(void) {
 
     // Music (looping)
     if (!ame_audio_source_load_opus_file(
-            &g_music, "assets/shon.opus", true)) {
+            &g_music, APP_MUSIC_PATH, true)) {
         SDL_Log("music load failed");
     }
     g_music.gain = 0.35f;
@@ -237,16 +259,12 @@ int game_app_init(void) {
     triggers_add("unlock_car_boost", dummy, 1, on_trigger_unlock, NULL);
     triggers_add("unlock_car_fly", dummy, 1, on_trigger_unlock, NULL);
 
-    // Init dialogue runtime from embedded scenes
-    g_dlg_scene = ame_dialogue_load_embedded("sample");
-    if (!g_dlg_scene)
-        g_dlg_scene = ame_dialogue_load_embedded("museum_entrance");
+    // Init dialogue runtime from project-local generated scenes
+    g_dlg_scene = load_local_dialogue("introduction");
     if (g_dlg_scene) {
         if (ame_dialogue_runtime_init(&g_dlg_rt, g_dlg_scene, dialogue_trigger_hook, NULL)) {
             g_dlg_active = true;
-            const AmeDialogueLine* ln = ame_dialogue_play_current(&g_dlg_rt);
-            if (ln && ln->text)
-                SDL_Log("Dialogue: %s: %s", ln->speaker ? ln->speaker : "", ln->text);
+            ame_dialogue_play_current(&g_dlg_rt);
         }
     }
 
@@ -294,12 +312,9 @@ int game_app_init(void) {
     }
 
     // Spawn points.
-    gameplay_add_spawn_point(0.0f, 0.0f); // default spawn at world origin
-    car_set_position(&g_car, 10, 30);
-    human_set_position(&g_human, 10, 50);
-
-    // TEMP: spawn a test saw near the start so audio can be verified
-    gameplay_spawn_saw(60.0f, 60.0f, 8.0f);
+    gameplay_add_spawn_point(APP_DEFAULT_SPAWN_X, APP_DEFAULT_SPAWN_Y); // default spawn
+    car_set_position(&g_car, APP_START_CAR_X, APP_START_CAR_Y);
+    human_set_position(&g_human, APP_START_HUMAN_X, APP_START_HUMAN_Y);
 
     g_logic_thread = SDL_CreateThread(logic_thread_main, "logic", NULL);
     if (!g_logic_thread) {
@@ -339,6 +354,11 @@ int game_app_iterate(void* appstate) {
 
     update_switch_logic();
 
+    // Restart on R
+    if (input_restart_edge()) {
+        gameplay_restart(&g_human, &g_car);
+    }
+
     // Keep human near car when driving to allow quick switch back
     if (g_mode == CONTROL_CAR) {
         float cx, cy;
@@ -365,9 +385,6 @@ int game_app_iterate(void* appstate) {
             }
         } else if (input_advance_dialogue_edge()) {
             ln = ame_dialogue_advance(&g_dlg_rt);
-        }
-        if (ln && ln->text) {
-            SDL_Log("Dialogue: %s: %s", ln->speaker ? ln->speaker : "", ln->text);
         }
     }
 
@@ -480,6 +497,11 @@ int game_app_iterate(void* appstate) {
     car_render(&g_car);
     human_render(&g_human);
     gameplay_render();
+
+    // HUD and Dialogue UI
+    ui_render_hud(&g_cam, g_w, g_h, &g_car);
+    ui_render_dialogue(&g_cam, g_w, g_h, &g_dlg_rt, g_dlg_active);
+
     pipeline_end();
     SDL_GL_SwapWindow(g_window);
     return SDL_APP_CONTINUE;
@@ -498,6 +520,7 @@ void game_app_quit(void* appstate, int result) {
     pipeline_shutdown();
     free_obj_map(&g_map_mesh);
     gameplay_shutdown();
+    ui_shutdown();
     physics_shutdown();
     input_shutdown();
     ame_audio_shutdown();

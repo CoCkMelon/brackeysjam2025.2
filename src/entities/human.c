@@ -160,6 +160,48 @@ void human_fixed(Human* h, float dt) {
     if (h->x_control_lock <= 0.0f) {
         physics_set_velocity_x(h->body, target_vx);
     }
+
+    // Animation selection using centralized config
+    if (h->jump_anim_playing) {
+        // If playing takeoff, advance through exactly 2 frames at jump_fps then hold first jump frame
+            h->jump_anim_time += dt;
+            int frame_i = (int)(h->jump_anim_time * h->cfg.jump_fps); // 0,1,2,...
+            if (frame_i <= 0)
+                frame_i = 0;
+            if (frame_i >= 2) {
+                // Finished the two-frame takeoff
+                h->jump_anim_playing = 0;
+                frame_i = 0; // fall-through to holding first frame below
+            }
+            int idx = h->cfg.jump_first + (frame_i > 1 ? 1 : frame_i);
+            if (idx >= 0 && idx < h->frame_count)
+                h->current_frame = idx;
+            else
+                h->current_frame = h->cfg.idle;
+    } else if (!grounded) {
+        // Hold first jump frame while airborne
+        h->current_frame = (h->cfg.jump_first < h->frame_count ? h->cfg.jump_first : h->cfg.idle);
+    } else if (dir != 0 && h->cfg.walk_count > 0) {
+        // If just landed, restart walk cycle and stop any residual jump takeoff
+        if (!h->was_grounded) {
+            h->anim_time = 0.0f;
+            h->jump_anim_playing = 0;
+            h->jump_anim_time = 0.0f;
+        }
+        h->anim_time += dt;
+        int cycle = (int)(h->anim_time * h->cfg.walk_fps) % h->cfg.walk_count;
+        int idx = h->cfg.walk[cycle];
+        if (idx >= 0 && idx < h->frame_count)
+            h->current_frame = idx;
+        else
+            h->current_frame = h->cfg.idle;
+    } else {
+        // Idle when grounded and no input; stop any residual jump takeoff
+        h->current_frame = (h->cfg.idle < h->frame_count ? h->cfg.idle : 0);
+        h->anim_time = 0.0f;
+        h->jump_anim_playing = 0;
+        h->jump_anim_time = 0.0f;
+    }
     if (input_jump_edge()) {
         // Start one-shot 2-frame jump takeoff animation immediately
         h->jump_anim_playing = 1;
@@ -184,57 +226,15 @@ void human_fixed(Human* h, float dt) {
             }
         }
     }
-
-    // Animation selection using centralized config
-    if (!grounded) {
-        // If playing takeoff, advance through exactly 2 frames at jump_fps then hold first jump frame
-        if (h->jump_anim_playing) {
-            h->jump_anim_time += dt;
-            int frame_i = (int)(h->jump_anim_time * h->cfg.jump_fps); // 0,1,2,...
-            if (frame_i <= 0)
-                frame_i = 0;
-            if (frame_i >= 2) {
-                // Finished the two-frame takeoff
-                h->jump_anim_playing = 0;
-                frame_i = 0; // fall-through to holding first frame below
-            }
-            int idx = h->cfg.jump_first + (frame_i > 1 ? 1 : frame_i);
-            if (idx >= 0 && idx < h->frame_count)
-                h->current_frame = idx;
-            else
-                h->current_frame = h->cfg.idle;
-        } else {
-            // Hold first jump frame while airborne
-            h->current_frame = (h->cfg.jump_first < h->frame_count ? h->cfg.jump_first : h->cfg.idle);
-        }
-    } else if (dir != 0 && h->cfg.walk_count > 0) {
-        // If just landed, restart walk cycle and stop any residual jump takeoff
-        if (!h->was_grounded) {
-            h->anim_time = 0.0f;
-            h->jump_anim_playing = 0;
-            h->jump_anim_time = 0.0f;
-        }
-        h->anim_time += dt;
-        int cycle = (int)(h->anim_time * h->cfg.walk_fps) % h->cfg.walk_count;
-        int idx = h->cfg.walk[cycle];
-        if (idx >= 0 && idx < h->frame_count)
-            h->current_frame = idx;
-        else
-            h->current_frame = h->cfg.idle;
-    } else {
-        // Idle when grounded and no input; stop any residual jump takeoff
-        h->current_frame = (h->cfg.idle < h->frame_count ? h->cfg.idle : 0);
-        h->anim_time = 0.0f;
-        h->jump_anim_playing = 0;
-        h->jump_anim_time = 0.0f;
-    }
-
     h->was_grounded = grounded;
 }
 
 void human_update(Human* h, float dt) {
     (void)dt;
     (void)h;
+    float x, y;
+    human_get_position(h, &x, &y);
+    if (y < -10000) h->health.hp = 0;
 }
 
 void human_render(const Human* h) {

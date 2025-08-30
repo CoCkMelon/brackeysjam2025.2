@@ -1,3 +1,25 @@
+/*
+Recognized object name keywords in OBJ shapes:
+
+Prefixes:
+- "Trigger <Name>"      -> Creates a trigger AABB named <Name> (fires repeatedly while overlapped)
+- "TriggerGrenade"      -> Legacy trigger name (kept for back-compat)
+- "TriggerRocket"       -> Legacy trigger name (kept for back-compat)
+- "TriggerTurretShot"   -> Legacy trigger name (kept for back-compat)
+- "Mine"                -> Spawns a mine at the shape's center
+- "Turret"              -> Spawns a turret at the shape's center
+- "Fuel[Amount]"        -> Spawns a fuel pickup; e.g. Fuel50 gives 50 (default 25)
+- "Spawn" or "SpawnPoint" -> Adds a player spawn point at the shape's center
+- "BoxCollider"         -> Static box collider from the shape's AABB
+- "CircleCollider"      -> Static circle collider from the shape's AABB radius
+- "EdgeCollider"        -> Static edge from the first two vertices
+- "ChainCollider[Loop|Closed]" -> Static chain from all vertices; closed if name contains Loop/Closed
+- "MeshCollider"        -> Static triangle mesh collider from the shape's triangles
+
+Tags (substring anywhere in name):
+- "Saw"                 -> Spawns a saw (radius from shape size). Visual mesh not used.
+- "Spike"               -> Marks triangles as spike colliders; still contributes to visual mesh.
+*/
 #include "obj_map.h"
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -95,6 +117,24 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             if (y > maxy)
                 maxy = y;
         }
+        // Generic trigger support: objects named "Trigger <name>" create a trigger with that name
+        if (has_prefix(name, "Trigger ")) {
+            // Create a triggers AABB for this shape
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            float w = (maxx - minx);
+            float h = (maxy - miny);
+            Aabb box = {cx, cy, w, h};
+            // Extract trigger name after the space
+            std::string trig_name = name.substr(8); // len("Trigger ") == 8
+            // Allocate payload with center to pass to callback
+            GameplayTriggerUser* u = (GameplayTriggerUser*)malloc(sizeof(GameplayTriggerUser));
+            if (u) { u->x = cx; u->y = cy; }
+            // Not once: can keep firing when overlapped
+            triggers_add(trig_name.c_str(), box, 0, gameplay_on_trigger, (void*)u);
+            continue;
+        }
+        // Back-compat: support legacy concatenated trigger names
         if (has_prefix(name, "TriggerGrenade") || has_prefix(name, "TriggerRocket") ||
             has_prefix(name, "TriggerTurretShot")) {
             // Create a triggers AABB for this shape
@@ -120,6 +160,19 @@ bool load_obj_map(const char* path, AmeLocalMesh* out_mesh) {
             float cx = 0.5f * (minx + maxx);
             float cy = 0.5f * (miny + maxy);
             spawn_turret(cx, cy);
+            continue;
+        }
+        if (has_prefix(name, "Fuel")) {
+            float cx = 0.5f * (minx + maxx);
+            float cy = 0.5f * (miny + maxy);
+            // Try to parse amount after prefix, e.g., Fuel50
+            float amount = 25.0f;
+            const char* p = name.c_str() + 4; // after "Fuel"
+            if (*p) {
+                int val = atoi(p);
+                if (val > 0) amount = (float)val;
+            }
+            spawn_fuel_pickup(cx, cy, amount);
             continue;
         }
         if (has_prefix(name, "Spawn") || has_prefix(name, "SpawnPoint")) {

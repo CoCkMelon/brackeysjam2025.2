@@ -56,6 +56,11 @@ typedef struct {
     int alive;
 } Rocket;
 
+typedef struct { float x,y; float amount; int alive; } FuelPickup;
+#define MAX_FUEL 128
+static FuelPickup fuels[MAX_FUEL];
+static GLuint tex_fuel = 0;
+
 // Spawn points
 typedef struct { float x,y; int active; } SpawnPoint;
 #define MAX_SPAWNS 64
@@ -184,6 +189,8 @@ bool gameplay_init(void) {
     memset(spawns,0,sizeof(spawns)); spawn_count=0; active_spawn=-1;
     memset(g_expl_pool,0,sizeof(g_expl_pool));
     memset(saws,0,sizeof(saws)); saw_count=0;
+    memset(fuels,0,sizeof(fuels));
+    tex_fuel = make_color_tex(240, 200, 40);
     // Try to load saw texture
     tex_saw = load_texture_once_local("assets/saw.png");
     if (!tex_saw) tex_saw = make_color_tex(200,200,200);
@@ -334,6 +341,12 @@ if (car && car->body){ float cx, cy; car_get_position(car, &cx, &cy); float dx=c
     }
 }
 
+void spawn_fuel_pickup(float x, float y, float amount){
+    for (int i=0;i<MAX_FUEL;i++){
+        if (!fuels[i].alive){ fuels[i].alive=1; fuels[i].x=x; fuels[i].y=y; fuels[i].amount = amount>0?amount:25.0f; break; }
+    }
+}
+
 static inline int aabb_overlap(float ax,float ay,float aw,float ah, float bx,float by,float bw,float bh){
     float ax0=ax-aw*0.5f, ay0=ay-ah*0.5f, ax1=ax+aw*0.5f, ay1=ay+ah*0.5f;
     float bx0=bx-bw*0.5f, by0=by-bh*0.5f, bx1=bx+bw*0.5f, by1=by+bh*0.5f;
@@ -434,13 +447,26 @@ void gameplay_fixed(Human* human, Car* car, float dt){
         }
     }
 
+    // Fuel pickups
+    if (car && car->body){
+        float cx, cy; car_get_position(car,&cx,&cy);
+        for (int i=0;i<MAX_FUEL;i++){
+            if (!fuels[i].alive) continue;
+            float dx = fuels[i].x - cx, dy = fuels[i].y - cy;
+            if (dx*dx + dy*dy < 18.0f*18.0f){
+                car_refuel(car, fuels[i].amount);
+                fuels[i].alive = 0;
+            }
+        }
+    }
+
     // Update active spawn by proximity to car (main character)
     if (car && car->body && spawn_count>0){
         float cx, cy; car_get_position(car,&cx,&cy);
-        const float activate_r2 = 48.0f*48.0f;
+        const float activate_r2 = GAME_SPAWN_ACTIVATE_RADIUS * GAME_SPAWN_ACTIVATE_RADIUS;
         for (int i=0;i<spawn_count;i++){
             float dx = spawns[i].x - cx, dy = spawns[i].y - cy;
-            if (dx*dx+dy*dy <= activate_r2){ active_spawn = i; }
+            if (dx*dx+dy*dy <= activate_r2){ active_spawn = i; SDL_Log("spawn changed"); }
         }
     }
 
@@ -460,7 +486,7 @@ void gameplay_fixed(Human* human, Car* car, float dt){
     // Respawn if dead
     if (((human && human->health.hp<=0.0f) || (car && car->hp<=0.0f)) && active_spawn>=0){
         float sx = spawns[active_spawn].x, sy = spawns[active_spawn].y;
-        if (car){ car_set_position(car, sx, sy); car->hp = car->max_hp; }
+        if (car){ car_set_position(car, sx, sy); car->hp = car->max_hp; car->fuel = car->max_fuel; }
         if (human){ human_set_position(human, sx, sy+20.0f); human->health.hp = human->health.max_hp; }
     }
 }
@@ -567,6 +593,14 @@ int gameplay_collect_audio_refs(AmeAudioSourceRef* out, int max_refs,
     return c;
 }
 
+void gameplay_restart(Human* human, Car* car){
+    if (active_spawn>=0){
+        float sx = spawns[active_spawn].x, sy = spawns[active_spawn].y;
+        if (car){ car_set_position(car, sx, sy); car->hp = car->max_hp; car->fuel = car->max_fuel; }
+        if (human){ human_set_position(human, sx, sy+20.0f); human->health.hp = human->health.max_hp; }
+    }
+}
+
 void gameplay_render(void){
     // Draw grenades
     for(int i=0;i<MAX_GRENADES;i++) if(grenades[i].alive){ float x=0,y=0; physics_get_position(grenades[i].body,&x,&y); pipeline_sprite_quad_rot(x,y,6,6,0,tex_grenade,1,1,1,1);}    
@@ -589,4 +623,6 @@ void gameplay_render(void){
     }
     // Rockets
     for(int i=0;i<MAX_ROCKETS;i++) if(rockets[i].alive){ float x=0,y=0; physics_get_position(rockets[i].body,&x,&y); pipeline_sprite_quad_rot(x,y,6,3,0,tex_rocket,1,1,1,1);}    
+    // Fuel pickups
+    for(int i=0;i<MAX_FUEL;i++) if(fuels[i].alive){ pipeline_sprite_quad_rot(fuels[i].x, fuels[i].y, 8, 8, 0, tex_fuel, 1,1,1,1);}    
 }
