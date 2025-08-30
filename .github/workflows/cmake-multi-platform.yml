@@ -1,4 +1,4 @@
-name: CMake Build and Package on Multiple Platforms
+name: CMake on multiple platforms
 
 on:
   push:
@@ -13,107 +13,143 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, freebsd, openbsd]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         build_type: [Release]
-        c_compiler: [gcc, clang, cl]
         include:
-          # Windows configuration
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
-
-          # Ubuntu with GCC
+            artifact_name: game-windows
+            extension: .exe
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-
-          # Ubuntu with Clang
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
-
-          # macOS with Clang
+            artifact_name: game-linux
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
-
-          # FreeBSD configuration (requires self-hosted runner)
-          - os: freebsd
-            c_compiler: clang
-            cpp_compiler: clang++
-
-          # OpenBSD configuration (requires self-hosted runner)
-          - os: openbsd
-            c_compiler: clang
-            cpp_compiler: clang++
-
+            artifact_name: game-macos
         exclude:
           - os: windows-latest
             c_compiler: gcc
           - os: windows-latest
             c_compiler: clang
-          - os: ubuntu-latest
-            c_compiler: cl
-          - os: macos-latest
-            c_compiler: gcc
-          - os: macos-latest
-            c_compiler: cl
-          # Exclude compilers for FreeBSD and OpenBSD that aren't typically used
-          - os: freebsd
-            c_compiler: gcc
-          - os: openbsd
-            c_compiler: gcc
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Setup SDL
-        uses: libsdl-org/setup-sdl@v1
-        with:
-          version: 3-head
-          version-sdl-image: 3-head
-          version-sdl-mixer: 3-head
-          version-sdl-ttf: 3-head
-          # Add other SDL components as needed
+    - name: Setup SDL
+      uses: libsdl-org/setup-sdl@v1
+      with:
+        version: 3-head
+        version-sdl-image: 3-head
+        version-sdl-mixer: 3-head
+        version-sdl-ttf: 3-head
+        build-type: Release
+        add-to-environment: true
 
-      - name: Set Build Output Directory
-        id: dirs
-        run: echo "build_dir=${{ github.workspace }}/build" >> $GITHUB_ENV
+    - name: Set reusable strings
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+        echo "dist-dir=${{ github.workspace }}/dist" >> "$GITHUB_OUTPUT"
 
-      - name: Configure CMake
-        run: |
-          cmake -B $build_dir \
-            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -S ${{ github.workspace }}
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -S ${{ github.workspace }}
 
-      - name: Build Project
-        run: cmake --build $build_dir --config ${{ matrix.build_type }}
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-      - name: Run Tests
-        working-directory: $build_dir
-        run: ctest --output-on-failure --build-config ${{ matrix.build_type }}
+    - name: Test
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: ctest --build-config ${{ matrix.build_type }}
 
-      - name: Package Build into ZIP (Non-Windows)
-        if: success() && matrix.os != 'windows-latest'
-        run: |
-          cd $build_dir
-          zip -r ../../build-${{ matrix.os }}-${{ matrix.build_type }}.zip ./*
-        shell: bash
+    - name: Create distribution directory
+      run: |
+        mkdir -p ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}
+        # Copy executable (adjust 'game' to your actual executable name)
+        cp ${{ steps.strings.outputs.build-output-dir }}/game${{ matrix.extension }} ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}/
+        # Copy assets folder
+        cp -r ${{ github.workspace }}/assets ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}/
 
-      - name: Package Build into ZIP (Windows)
-        if: success() && matrix.os == 'windows-latest'
-        run: |
-          Compress-Archive -Path * -DestinationPath ..\build-${{ matrix.os }}-${{ matrix.build_type }}.zip
-        shell: powershell
-        working-directory: $build_dir
+    - name: Package for distribution
+      run: |
+        cd ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          7z a ../${{ matrix.artifact_name }}.zip ./*
+        else
+          zip -r ../${{ matrix.artifact_name }}.zip ./*
+        fi
 
-      - name: Upload Build Artifact
-        if: success()
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-${{ matrix.os }}-${{ matrix.build_type }}
-          path: |
-            ${{ github.workspace }}/build-${{ matrix.os }}-${{ matrix.build_type }}.zip
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}.zip
+
+  # Additional jobs for BSD systems (using custom runners or Docker)
+  build-bsd:
+    runs-on: ubuntu-latest  # We'll use Docker to build for BSD
+    strategy:
+      matrix:
+        bsd_type: [freebsd, openbsd]
+        build_type: [Release]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Docker for BSD cross-compilation
+      run: |
+        if [ "${{ matrix.bsd_type }}" = "freebsd" ]; then
+          docker pull freebsd/freebsd:13.2
+        else
+          docker pull openbsd:7.4
+        fi
+
+    - name: Build for ${{ matrix.bsd_type }}
+      run: |
+        if [ "${{ matrix.bsd_type }}" = "freebsd" ]; then
+          docker run --rm -v $(pwd):/build freebsd/freebsd:13.2 /bin/sh -c "
+            pkg install -y cmake sdl2 sdl2_image sdl2_mixer sdl2_ttf &&
+            mkdir -p /build/build-freebsd &&
+            cd /build/build-freebsd &&
+            cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} .. &&
+            make
+          "
+        else
+          docker run --rm -v $(pwd):/build openbsd:7.4 /bin/sh -c "
+            pkg_add cmake sdl2 sdl2-image sdl2-mixer sdl2-ttf &&
+            mkdir -p /build/build-openbsd &&
+            cd /build/build-openbsd &&
+            cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} .. &&
+            make
+          "
+        fi
+
+    - name: Package BSD build
+      run: |
+        if [ "${{ matrix.bsd_type }}" = "freebsd" ]; then
+          mkdir -p dist/game-${{ matrix.bsd_type }}
+          cp build-freebsd/game dist/game-${{ matrix.bsd_type }}/
+          cp -r assets dist/game-${{ matrix.bsd_type }}/
+          cd dist/game-${{ matrix.bsd_type }}
+          zip -r ../game-${{ matrix.bsd_type }}.zip ./*
+        else
+          mkdir -p dist/game-${{ matrix.bsd_type }}
+          cp build-openbsd/game dist/game-${{ matrix.bsd_type }}/
+          cp -r assets dist/game-${{ matrix.bsd_type }}/
+          cd dist/game-${{ matrix.bsd_type }}
+          zip -r ../game-${{ matrix.bsd_type }}.zip ./*
+        fi
+
+    - name: Upload BSD artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: game-${{ matrix.bsd_type }}
+        path: dist/game-${{ matrix.bsd_type }}.zip
