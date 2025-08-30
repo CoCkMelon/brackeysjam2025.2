@@ -1,4 +1,4 @@
-name: CMake on multiple platforms
+name: Build Game on Multiple Platforms
 
 on:
   push:
@@ -9,31 +9,37 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         build_type: [Release]
+        c_compiler: [gcc, clang, cl]
+        cpp_compiler: [g++, clang++, cl]
         include:
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
-            artifact_name: game-windows
-            extension: .exe
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-            artifact_name: game-linux
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
-            artifact_name: game-macos
         exclude:
           - os: windows-latest
             c_compiler: gcc
           - os: windows-latest
             c_compiler: clang
+          - os: ubuntu-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
+          - os: macos-latest
+            c_compiler: cl
 
     steps:
     - uses: actions/checkout@v4
@@ -45,15 +51,12 @@ jobs:
         version-sdl-image: 3-head
         version-sdl-mixer: 3-head
         version-sdl-ttf: 3-head
-        build-type: Release
-        add-to-environment: true
 
     - name: Set reusable strings
       id: strings
       shell: bash
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-        echo "dist-dir=${{ github.workspace }}/dist" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       run: >
@@ -70,86 +73,72 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: ctest --build-config ${{ matrix.build_type }}
 
-    - name: Create distribution directory
+    - name: Copy Assets to Build Directory
+      shell: bash
       run: |
-        mkdir -p ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}
-        # Copy executable (adjust 'game' to your actual executable name)
-        cp ${{ steps.strings.outputs.build-output-dir }}/game${{ matrix.extension }} ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}/
-        # Copy assets folder
-        cp -r ${{ github.workspace }}/assets ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}/
+        cp -r ${{ github.workspace }}/Assets ${{ steps.strings.outputs.build-output-dir }}/Assets
 
-    - name: Package for distribution
+    - name: Create Zip Archive
+      shell: bash
       run: |
-        cd ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          7z a ../${{ matrix.artifact_name }}.zip ./*
-        else
-          zip -r ../${{ matrix.artifact_name }}.zip ./*
-        fi
+        cd ${{ steps.strings.outputs.build-output-dir }}
+        zip -r ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip .
+      # For Windows, we need to use a different command to zip
+      # This is handled by using bash shell which works across platforms
 
-    - name: Upload artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact_name }}
-        path: ${{ steps.strings.outputs.dist-dir }}/${{ matrix.artifact_name }}.zip
+        name: game-${{ matrix.os }}-${{ matrix.build_type }}
+        path: ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip
 
-  # Additional jobs for BSD systems (using custom runners or Docker)
-  build-bsd:
-    runs-on: ubuntu-latest  # We'll use Docker to build for BSD
-    strategy:
-      matrix:
-        bsd_type: [freebsd, openbsd]
-        build_type: [Release]
-
+# For FreeBSD and OpenBSD, we can use the `cross-platform-actions/action` to run commands on these platforms.
+  build-freebsd:
+    runs-on: ubuntu-latest
+    name: Build on FreeBSD
     steps:
-    - uses: actions/checkout@v4
+    - uses: cross-platform-actions/action@v0.12.0
+      with:
+        operating_system: freebsd
+        run: |
+          # Install necessary packages
+          sudo pkg install -y cmake git zip
+          git clone https://github.com/${{ github.repository }}.git
+          cd ${{ github.event.repository.name }}
+          mkdir build
+          cd build
+          cmake ..
+          cmake --build .
+          cp -r ../Assets .
+          zip -r game-freebsd.zip .
 
-    - name: Setup Docker for BSD cross-compilation
-      run: |
-        if [ "${{ matrix.bsd_type }}" = "freebsd" ]; then
-          docker pull freebsd/freebsd:13.2
-        else
-          docker pull openbsd:7.4
-        fi
-
-    - name: Build for ${{ matrix.bsd_type }}
-      run: |
-        if [ "${{ matrix.bsd_type }}" = "freebsd" ]; then
-          docker run --rm -v $(pwd):/build freebsd/freebsd:13.2 /bin/sh -c "
-            pkg install -y cmake sdl2 sdl2_image sdl2_mixer sdl2_ttf &&
-            mkdir -p /build/build-freebsd &&
-            cd /build/build-freebsd &&
-            cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} .. &&
-            make
-          "
-        else
-          docker run --rm -v $(pwd):/build openbsd:7.4 /bin/sh -c "
-            pkg_add cmake sdl2 sdl2-image sdl2-mixer sdl2-ttf &&
-            mkdir -p /build/build-openbsd &&
-            cd /build/build-openbsd &&
-            cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} .. &&
-            make
-          "
-        fi
-
-    - name: Package BSD build
-      run: |
-        if [ "${{ matrix.bsd_type }}" = "freebsd" ]; then
-          mkdir -p dist/game-${{ matrix.bsd_type }}
-          cp build-freebsd/game dist/game-${{ matrix.bsd_type }}/
-          cp -r assets dist/game-${{ matrix.bsd_type }}/
-          cd dist/game-${{ matrix.bsd_type }}
-          zip -r ../game-${{ matrix.bsd_type }}.zip ./*
-        else
-          mkdir -p dist/game-${{ matrix.bsd_type }}
-          cp build-openbsd/game dist/game-${{ matrix.bsd_type }}/
-          cp -r assets dist/game-${{ matrix.bsd_type }}/
-          cd dist/game-${{ matrix.bsd_type }}
-          zip -r ../game-${{ matrix.bsd_type }}.zip ./*
-        fi
-
-    - name: Upload BSD artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: game-${{ matrix.bsd_type }}
-        path: dist/game-${{ matrix.bsd_type }}.zip
+        name: game-freebsd
+        path: ${{ github.workspace }}/game-freebsd.zip
+
+  build-openbsd:
+    runs-on: ubuntu-latest
+    name: Build on OpenBSD
+    steps:
+    - uses: cross-platform-actions/action@v0.12.0
+      with:
+        operating_system: openbsd
+        run: |
+          # Install necessary packages
+          doas pkg_add cmake git zip
+          git clone https://github.com/${{ github.repository }}.git
+          cd ${{ github.event.repository.name }}
+          mkdir build
+          cd build
+          cmake ..
+          cmake --build .
+          cp -r ../Assets .
+          zip -r game-openbsd.zip .
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: game-openbsd
+        path: ${{ github.workspace }}/game-openbsd.zip
