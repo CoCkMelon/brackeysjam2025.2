@@ -11,6 +11,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Platform-specific baseline tweaks
+if(MINGW)
+  # Avoid Windows macro pollution and enable lean headers
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+  # Prefer UTF-8 source/exec on MinGW
+  add_compile_options(-finput-charset=UTF-8 -fexec-charset=UTF-8)
+endif()
+
 # Options
 option(BUILD_BUNDLED_SDL "Fetch and build SDL3 from source and link statically" OFF)
 option(BUILD_BUNDLED_SDL_IMAGE "Fetch and build SDL_image from source and link statically" OFF)
@@ -237,6 +245,27 @@ if(BUILD_BUNDLED_SDL)
   if(UNIX AND NOT APPLE)
     find_package(Threads REQUIRED)
     target_link_libraries(game PRIVATE Threads::Threads m dl)
+  elseif(MINGW)
+    # With static SDL on Windows/MinGW, explicitly link required system libs
+    # This list mirrors what SDL expects when not using a shared SDL3
+    target_link_libraries(game PRIVATE
+      user32
+      gdi32
+      winmm
+      imm32
+      setupapi
+      version
+      shell32
+      ole32
+      oleaut32
+      uuid
+      advapi32
+      ws2_32
+      bcrypt
+      iphlpapi
+    )
+    # Optionally enable static libgcc/std++ if you want a fully static runtime
+    # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
   endif()
 endif()
 
