@@ -89,6 +89,9 @@ if(BUILD_BUNDLED_SDL)
   # Some platforms require this to export alias target SDL3::SDL3
   set(SDL_HIDESYSTEMHEADERS OFF CACHE BOOL "" FORCE)
 
+  # Prefer config packages when resolving SDL add-ons
+  set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
+
   FetchContent_Declare(
     SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL
@@ -97,8 +100,11 @@ if(BUILD_BUNDLED_SDL)
   FetchContent_MakeAvailable(SDL3)
   # Make SDL3 discoverable by subprojects that use find_package(SDL3)
   if(DEFINED sdl3_BINARY_DIR AND EXISTS "${sdl3_BINARY_DIR}")
+    # Clear any stale cache entry from previous builds (e.g., different workspace)
+    unset(SDL3_DIR CACHE)
     set(SDL3_DIR "${sdl3_BINARY_DIR}" CACHE PATH "Path to SDL3Config.cmake for bundled SDL" FORCE)
-    list(APPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
+    # Ensure our SDL3 takes precedence over any older paths
+    list(PREPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
   endif()
 endif()
 
@@ -130,14 +136,16 @@ if(BUILD_BUNDLED_SDL_IMAGE)
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_image
     GIT_TAG ${SDL3_IMAGE_TAG}
   )
-  # Ensure it sees our SDL3
-  if(DEFINED SDL3_DIR)
-    set(SDL3_DIR "${SDL3_DIR}" CACHE PATH "" FORCE)
+  # Ensure it sees our SDL3 (override any stale cache path)
+  if(DEFINED sdl3_BINARY_DIR AND EXISTS "${sdl3_BINARY_DIR}")
+    unset(SDL3_DIR CACHE)
+    set(SDL3_DIR "${sdl3_BINARY_DIR}" CACHE PATH "Path to SDL3Config.cmake for bundled SDL" FORCE)
+    list(PREPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
   endif()
   FetchContent_MakeAvailable(SDL3_image)
   if(DEFINED sdl3_image_BINARY_DIR AND EXISTS "${sdl3_image_BINARY_DIR}")
     set(SDL3_image_DIR "${sdl3_image_BINARY_DIR}" CACHE PATH "Path to SDL3_imageConfig.cmake for bundled SDL_image" FORCE)
-    list(APPEND CMAKE_PREFIX_PATH "${sdl3_image_BINARY_DIR}")
+    list(PREPEND CMAKE_PREFIX_PATH "${sdl3_image_BINARY_DIR}")
   endif()
 endif()
 

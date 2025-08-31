@@ -6,11 +6,23 @@ lines:
   - speaker: Glitcher
     text: "How is your day?"
   - speaker: Glitcher
-    text: "Controls are WS, or up-down acceleration"
+    text: "WS/up-down acceleration"
   - speaker: Glitcher
     text: "AD, left-right yaw"
   - speaker: Glitcher
     text: "So. We have a good life over there."
+  - speaker: Glitcher
+    text: "I want more."
+  - speaker: Glitcher
+    text: "Go to the right."
+  - speaker: Glitcher
+    text: "My forward."
+  - speaker: Glitcher
+    text: "I just met Venera."
+  - speaker: Glitcher
+    text: "She is a pro driver."
+  - speaker: Glitcher
+    text: "Press E to switch character."
   - id: end
     speaker: Guide
     text: "Okay, have fun!"
