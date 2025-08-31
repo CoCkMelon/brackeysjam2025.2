@@ -8,10 +8,14 @@ static const AmeDialogueLine annoying_lines[] = {
     {NULL, "Venera", "I dislike that part.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
     {NULL, "Venera", "So annoying.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
     {NULL, "Glitcher", "I am a bit worried.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
-    {NULL, "Glitcher", "Are you really a racer to pass such callenge without breaking me?", NULL,
-     NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
-    {NULL, "Venera", "Don't be afraid, collision damage was not added to this game.", NULL, NULL,
-     NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {NULL, "Glitcher", "Are you really a racer to", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+     0},
+    {NULL, "Glitcher", "to pass such callenge", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {NULL, "Glitcher", "without breaking me?", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {NULL, "Venera", "Don't be afraid,", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {NULL, "Venera", "fall or flip damage", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {NULL, "Venera", "was not added to this game.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+     0},
     {NULL, "Glitcher", "Splendid.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
 };
 
@@ -21,7 +25,8 @@ static const AmeDialogueScene scene_annoying = {
     .line_count = sizeof(annoying_lines) / sizeof(annoying_lines[0])};
 
 static const AmeDialogueLine introduction_lines[] = {
-    {"start", "Glitcher", "Hi.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {"start", "Glitcher", "Hi. Press ENTER to proceed.", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+     NULL, 0},
     {NULL, "Glitcher", "How is your day?", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
     {NULL, "Glitcher", "Controls are WS, or up-down acceleration", NULL, NULL, NULL, NULL, NULL,
      NULL, NULL, NULL, 0},
@@ -36,9 +41,22 @@ static const AmeDialogueScene scene_introduction = {
     .lines = introduction_lines,
     .line_count = sizeof(introduction_lines) / sizeof(introduction_lines[0])};
 
+static const AmeDialogueLine enableJump_lines[] = {
+    {"start", "Glitcher", "Wow! That cookie", NULL, NULL, NULL, NULL, "unlock_car_jump", NULL, NULL,
+     NULL, 0},
+    {NULL, "Glitcher", "gave me ability", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+    {NULL, "Glitcher", "to jump.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0},
+};
+
+static const AmeDialogueScene scene_enableJump = {
+    .scene = "enableJump",
+    .lines = enableJump_lines,
+    .line_count = sizeof(enableJump_lines) / sizeof(enableJump_lines[0])};
+
 const AmeDialogueScene* ame__generated_scenes[] = {
     &scene_annoying,
     &scene_introduction,
+    &scene_enableJump,
 };
 
 const size_t ame__generated_scenes_count =

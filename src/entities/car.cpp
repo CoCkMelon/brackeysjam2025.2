@@ -90,14 +90,14 @@ void car_init(Car* c) {
     c->cfg.motor_speed = 500.0f;      // rad/s
     c->cfg.motor_torque = 200000.0f;  // stronger torque
     c->cfg.jump_impulse = 120000.0f;
-    c->cfg.boost_mul = 5.0f;
+    c->cfg.boost_mul = 50.0f;
     c->cfg.fly_impulse = 12000.0f;
     c->cfg.gyro_torque = 4000000.0f;
 
-    // Temporarly enable abilities here
-    g_abilities.car_boost = true;
-    // g_abilities.car_fly = true;
-    g_abilities.car_jump = true;
+    // Temporarily enable abilities here
+    ability_set_car_boost(true);
+    // ability_set_car_fly(true);
+    // ability_set_car_jump(true);
 
     // Try to load texture files via executable-relative and CWD; log only once on failure
     c->tex_body = load_texture_from_file("assets/CarForBrackeyJam.png");
@@ -206,7 +206,7 @@ void car_fixed(Car* c, float dt) {
     // Use W/S for acceleration, A/D for yaw/spin
     int accel = input_accel_dir();
     int yaw = input_yaw_dir();
-    float boost = (g_abilities.car_boost && input_boost_down()) ? c->cfg.boost_mul : 1.0f;
+    float boost = (ability_get_car_boost() && input_boost_down()) ? c->cfg.boost_mul : 1.0f;
     // Fuel consumption: only when applying acceleration or boosting
     if (accel != 0) {
         float base_use = 10.0f;  // units per second at full throttle
@@ -232,11 +232,11 @@ void car_fixed(Car* c, float dt) {
     float torque = -c->cfg.gyro_torque * (float)yaw;  // stronger yaw torque for noticeable rotation
     c->body->ApplyTorque(torque, true);
     // Jump/hop (unlockable) - grounded condition only needed for jumping
-    if (g_abilities.car_jump && input_jump_edge() && physics_is_grounded(c->body)) {
+    if (ability_get_car_jump() && input_jump_edge() && physics_is_grounded(c->body)) {
         c->body->ApplyLinearImpulseToCenter(b2Vec2(0.0f, c->cfg.jump_impulse), true);
     }
     // Helicopter-like fly (unlockable): hold Space to get gentle upward force
-    if (g_abilities.car_fly && input_jump_down()) {
+    if (ability_get_car_fly() && input_jump_down()) {
         c->body->ApplyForceToCenter(b2Vec2(0.0f, c->cfg.fly_impulse), true);
     }
     physics_unlock();
@@ -276,6 +276,16 @@ void car_render(const Car* c) {
         pipeline_sprite_quad_rot(wf.x, wf.y, d, d, wang, c->tex_wheel, 1, 1, 1, 1);
     }
     physics_unlock();
+}
+
+void car_set_boost(bool val) {
+    ability_set_car_boost(val);
+}
+void car_set_jump(bool val) {
+    ability_set_car_jump(val);
+}
+void car_set_fly(bool val) {
+    ability_set_car_fly(val);
 }
 
 void car_set_position(Car* c, float x, float y) {

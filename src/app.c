@@ -31,12 +31,6 @@ static int g_w = APP_DEFAULT_WIDTH, g_h = APP_DEFAULT_HEIGHT;
 static AmeCamera g_cam;
 static atomic_bool g_should_quit = false;
 
-typedef enum { CONTROL_HUMAN, CONTROL_CAR } ControlMode;
-static ControlMode g_mode = CONTROL_CAR;
-
-static Human g_human;
-static Car g_car;
-
 // Audio
 static AmeAudioSource g_music;
 static AmeAudioSource g_car_rear_audio;   // rear wheel/motor
@@ -170,13 +164,13 @@ static void on_trigger_unlock(const char* name, void* user) {
     if (!name)
         return;
     if (SDL_strcmp(name, "unlock_car_jump") == 0) {
-        g_abilities.car_jump = true;
+        car_set_jump(true);
         SDL_Log("Ability unlocked: car_jump");
     } else if (SDL_strcmp(name, "unlock_car_boost") == 0) {
-        g_abilities.car_boost = true;
+        car_set_boost(true);
         SDL_Log("Ability unlocked: car_boost");
     } else if (SDL_strcmp(name, "unlock_car_fly") == 0) {
-        g_abilities.car_fly = true;
+        car_set_fly(true);
         SDL_Log("Ability unlocked: car_fly");
     }
 }
@@ -459,7 +453,7 @@ int game_app_iterate(void* appstate) {
     gameplay_render();
 
     // HUD and Dialogue UI
-    ui_render_hud(&g_cam, g_w, g_h, &g_car);
+    ui_render_hud(&g_cam, g_w, g_h, &g_car, &g_human, &g_mode);
     ui_render_dialogue(&g_cam, g_w, g_h, dialogue_get_runtime(), dialogue_is_active());
 
     pipeline_end();

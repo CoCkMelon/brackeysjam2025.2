@@ -1,0 +1,10 @@
+title: "enableJump"
+lines:
+  - id: start
+    speaker: Glitcher
+    text: "Wow! That cookie"
+    trigger: "unlock_car_jump"
+  - speaker: Glitcher
+    text: "gave me ability"
+  - speaker: Glitcher
+    text: "to jump."

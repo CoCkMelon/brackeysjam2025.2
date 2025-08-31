@@ -62,6 +62,10 @@ float car_get_rear_wheel_angular_speed(const Car* c);
 float car_get_front_wheel_angular_speed(const Car* c);
 // Get current motor speed (for audio feedback)
 float car_get_motor_speed(const Car* c);
+// Ability setters
+void car_set_jump(bool val);
+void car_set_boost(bool val);
+void car_set_fly(bool val);
 
 // Damage helper
 void car_apply_damage(Car* c, float dmg);

@@ -10,8 +10,16 @@ lines:
   - speaker: Glitcher
     text: "I am a bit worried."
   - speaker: Glitcher
-    text: "Are you really a racer to pass such callenge without breaking me?"
+    text: "Are you really a racer to"
+  - speaker: Glitcher
+    text: "to pass such callenge"
+  - speaker: Glitcher
+    text: "without breaking me?"
   - speaker: Venera
-    text: "Don't be afraid, collision damage was not added to this game."
+    text: "Don't be afraid,"
+  - speaker: Venera
+    text: "fall or flip damage"
+  - speaker: Venera
+    text: "was not added to this game."
   - speaker: Glitcher
     text: "Splendid."

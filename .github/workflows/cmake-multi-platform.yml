@@ -44,21 +44,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install SDL dependencies (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libsdl3-dev libsdl3-image-dev libsdl3-mixer-dev libsdl3-ttf-dev
-
-    - name: Install SDL dependencies (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install sdl3 sdl3_image sdl3_mixer sdl3_ttf
-
-    - name: Install SDL dependencies (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        choco install sdl3 sdl3_image sdl3_mixer sdl3_ttf
+    # SDL dependencies are fetched and built from source via CMake when BUILD_BUNDLED_SDL=ON
 
     - name: Set reusable strings
       id: strings
@@ -72,6 +58,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DBUILD_BUNDLED_SDL=ON
         -S ${{ github.workspace }}
 
     - name: Build

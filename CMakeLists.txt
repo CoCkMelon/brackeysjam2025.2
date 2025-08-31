@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Options
+option(BUILD_BUNDLED_SDL "Fetch and build SDL3 from source and link statically" OFF)
+
 # Sanitizer options
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
@@ -57,6 +60,26 @@ set(AME_GIT_TAG "master" CACHE STRING "Git tag/branch for A-Monogoose-Engine")
 add_compile_definitions(_GNU_SOURCE)
 
 include(FetchContent)
+
+# Optionally fetch and build SDL3 from source as a static library
+if(BUILD_BUNDLED_SDL)
+  message(STATUS "BUILD_BUNDLED_SDL=ON: Fetching and building SDL3 from source (static)")
+  # Configure SDL3 build options
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  set(SDL_TEST OFF CACHE BOOL "" FORCE)
+  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+  # Some platforms require this to export alias target SDL3::SDL3
+  set(SDL_HIDESYSTEMHEADERS OFF CACHE BOOL "" FORCE)
+
+  FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL
+    GIT_TAG release-3.2.2
+  )
+  FetchContent_MakeAvailable(SDL3)
+endif()
+
 # Ensure engine only builds what we actually use
 set(AME_BUILD_EXAMPLES OFF CACHE BOOL "Disable engine examples" FORCE)
 set(ASYNCINPUT_BUILD_EXAMPLES OFF CACHE BOOL "Disable asyncinput examples" FORCE)
@@ -118,6 +141,7 @@ if(ame_engine_SOURCE_DIR)
 endif()
 
 # Link with engine C API targets (avoid facade, but link libs it provides)
+# If BUILD_BUNDLED_SDL is ON, SDL3::SDL3 will be provided by the fetched SDL
 set(_ame_targets
   SDL3::SDL3
   Threads::Threads
@@ -133,6 +157,14 @@ foreach(tgt IN LISTS _ame_targets)
     message(STATUS "Linking game against: ${tgt}")
   endif()
 endforeach()
+
+# When statically linking SDL, ensure required platform libs are present
+if(BUILD_BUNDLED_SDL)
+  if(UNIX AND NOT APPLE)
+    find_package(Threads REQUIRED)
+    target_link_libraries(game PRIVATE Threads::Threads m dl)
+  endif()
+endif()
 
 # Also try to link against SDL3_ttf for systems where SDL_ttf is provided as SDL3
 # Prefer pkg-config if available to pick up proper include and library paths

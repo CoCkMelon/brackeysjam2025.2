@@ -16,6 +16,12 @@ typedef struct GameplayTriggerUser {
     float y;
 } GameplayTriggerUser;
 
+typedef enum { CONTROL_HUMAN, CONTROL_CAR } ControlMode;
+static ControlMode g_mode = CONTROL_CAR;
+
+static Human g_human;
+static Car g_car;
+
 bool gameplay_init(void);
 void gameplay_shutdown(void);
 

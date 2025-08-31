@@ -99,7 +99,7 @@ void human_init(Human* h) {
     h->frame_count = 0;
     h->current_frame = h->cfg.idle;
     h->anim_time = 0.0f;
-    h->facing = 1;         // face right initially
+    h->facing = 1;  // face right initially
     h->was_grounded = true;
     h->jump_anim_playing = 0;
     h->jump_anim_time = 0.0f;
@@ -147,8 +147,10 @@ void human_fixed(Human* h, float dt) {
     bool grounded = physics_is_grounded(h->body);
 
     // Update facing when input present
-    if (dir > 0) h->facing = 1;
-    else if (dir < 0) h->facing = -1;
+    if (dir > 0)
+        h->facing = 1;
+    else if (dir < 0)
+        h->facing = -1;
 
     // Decrease temporary horizontal control lock (after wall-jump)
     if (h->x_control_lock > 0.0f) {
@@ -163,21 +165,22 @@ void human_fixed(Human* h, float dt) {
 
     // Animation selection using centralized config
     if (h->jump_anim_playing) {
-        // If playing takeoff, advance through exactly 2 frames at jump_fps then hold first jump frame
-            h->jump_anim_time += dt;
-            int frame_i = (int)(h->jump_anim_time * h->cfg.jump_fps); // 0,1,2,...
-            if (frame_i <= 0)
-                frame_i = 0;
-            if (frame_i >= 2) {
-                // Finished the two-frame takeoff
-                h->jump_anim_playing = 0;
-                frame_i = 0; // fall-through to holding first frame below
-            }
-            int idx = h->cfg.jump_first + (frame_i > 1 ? 1 : frame_i);
-            if (idx >= 0 && idx < h->frame_count)
-                h->current_frame = idx;
-            else
-                h->current_frame = h->cfg.idle;
+        // If playing takeoff, advance through exactly 2 frames at jump_fps then hold first jump
+        // frame
+        h->jump_anim_time += dt;
+        int frame_i = (int)(h->jump_anim_time * h->cfg.jump_fps);  // 0,1,2,...
+        if (frame_i <= 0)
+            frame_i = 0;
+        if (frame_i >= 2) {
+            // Finished the two-frame takeoff
+            h->jump_anim_playing = 0;
+            frame_i = 0;  // fall-through to holding first frame below
+        }
+        int idx = h->cfg.jump_first + (frame_i > 1 ? 1 : frame_i);
+        if (idx >= 0 && idx < h->frame_count)
+            h->current_frame = idx;
+        else
+            h->current_frame = h->cfg.idle;
     } else if (!grounded) {
         // Hold first jump frame while airborne
         h->current_frame = (h->cfg.jump_first < h->frame_count ? h->cfg.jump_first : h->cfg.idle);
@@ -208,17 +211,17 @@ void human_fixed(Human* h, float dt) {
         h->jump_anim_time = 0.0f;
         h->current_frame = (h->cfg.jump_first < h->frame_count ? h->cfg.jump_first : h->cfg.idle);
         if (grounded) {
-            physics_apply_impulse(h->body, 0.0f, 14000.0f);
-            grounded = false; // treat as airborne now for anim purposes
+            physics_apply_impulse(h->body, 0.0f, 50000.0f);
+            grounded = false;  // treat as airborne now for anim purposes
         } else {
             int wall_dir = 0;
             if (physics_is_touching_wall(h->body, &wall_dir) && wall_dir != 0) {
                 // Wall jump: set horizontal velocity away from wall and add vertical impulse
                 float vx, vy;
                 physics_get_velocity(h->body, &vx, &vy);
-                vx = -120.0f * (float)wall_dir + target_vx / 2; // push away from wall
+                vx = -120.0f * (float)wall_dir + target_vx / 2;  // push away from wall
                 physics_set_velocity(h->body, vx, vy);
-                float iy = 12000.0f;
+                float iy = 50000.0f;
                 physics_apply_impulse(h->body, 0.0f, iy);
                 h->x_control_lock = 0.3f;  // ~300ms to preserve horizontal kick
             } else {
@@ -234,7 +237,8 @@ void human_update(Human* h, float dt) {
     (void)h;
     float x, y;
     human_get_position(h, &x, &y);
-    if (y < -10000) h->health.hp = 0;
+    if (y < -10000)
+        h->health.hp = 0;
 }
 
 void human_render(const Human* h) {

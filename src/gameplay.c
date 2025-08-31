@@ -245,7 +245,7 @@ bool gameplay_init(void) {
     memset(fuels, 0, sizeof(fuels));
     tex_fuel = make_color_tex(240, 200, 40);
     // Try to load saw texture
-    tex_saw = load_texture_once_local("assets/saw.png");
+    tex_saw = load_texture_once_local("assets/SawBlade.png");
     if (!tex_saw)
         tex_saw = make_color_tex(200, 200, 200);
     // Load explosion sfx (opus)
