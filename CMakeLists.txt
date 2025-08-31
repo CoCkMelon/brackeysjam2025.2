@@ -69,6 +69,11 @@ if(BUILD_BUNDLED_SDL)
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
   set(SDL_TEST OFF CACHE BOOL "" FORCE)
   set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+  # Linux backends
+  if(UNIX AND NOT APPLE)
+    set(SDL_WAYLAND ON CACHE BOOL "Enable SDL Wayland video backend" FORCE)
+    set(SDL_KMSDRM ON CACHE BOOL "Enable SDL KMSDRM video backend" FORCE)
+  endif()
   # Some platforms require this to export alias target SDL3::SDL3
   set(SDL_HIDESYSTEMHEADERS OFF CACHE BOOL "" FORCE)
 
