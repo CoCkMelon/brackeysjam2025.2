@@ -12,6 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         build_type: [Release]
         include:
           # Ubuntu GNU
@@ -26,10 +27,10 @@ jobs:
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
-          # Windows MSVC
+          # Windows MSVC (use VS generator)
           - os: windows-latest
-            c_compiler: cl
-            cpp_compiler: cl
+            vs_generator: "Visual Studio 17 2022"
+            arch: x64
 
     steps:
     - uses: actions/checkout@v4
@@ -64,7 +65,7 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }} \
-        -G "Visual Studio 17 2022" -A x64 \
+        -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }} \
         -DBUILD_BUNDLED_SDL=ON \
         -S ${{ github.workspace }}
 

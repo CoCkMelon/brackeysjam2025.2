@@ -83,6 +83,11 @@ if(BUILD_BUNDLED_SDL)
     GIT_TAG release-3.2.2
   )
   FetchContent_MakeAvailable(SDL3)
+  # Make SDL3 discoverable by subprojects that use find_package(SDL3)
+  if(DEFINED sdl3_BINARY_DIR AND EXISTS "${sdl3_BINARY_DIR}")
+    set(SDL3_DIR "${sdl3_BINARY_DIR}" CACHE PATH "Path to SDL3Config.cmake for bundled SDL" FORCE)
+    list(APPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
+  endif()
 endif()
 
 # Ensure engine only builds what we actually use
