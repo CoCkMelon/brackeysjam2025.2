@@ -12,19 +12,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
         build_type: [Release]
         include:
-          # Ubuntu GNU
+          # Ubuntu x86_64 - GNU
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          # Ubuntu Clang
+          # Ubuntu x86_64 - Clang
           - os: ubuntu-latest
             c_compiler: clang
             cpp_compiler: clang++
-          # macOS uses Apple Clang
-          - os: macos-latest
+          # Ubuntu ARM64 - GNU
+          - os: ubuntu-24.04-arm
+            c_compiler: gcc
+            cpp_compiler: g++
+          # Ubuntu ARM64 - Clang
+          - os: ubuntu-24.04-arm
+            c_compiler: clang
+            cpp_compiler: clang++
+          # macOS Intel (macos-13) - Apple Clang
+          - os: macos-13
+            c_compiler: clang
+            cpp_compiler: clang++
+          # macOS Apple Silicon (macos-14) - Apple Clang
+          - os: macos-14
             c_compiler: clang
             cpp_compiler: clang++
           # Windows MSVC (use VS generator)
@@ -37,7 +49,7 @@ jobs:
 
     # Linux build deps so SDL can enable Wayland/KMSDRM backends
     - name: Install Linux build dependencies
-      if: matrix.os == 'ubuntu-latest'
+      if: startsWith(matrix.os, 'ubuntu-')
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -51,6 +63,12 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
+    # Windows: pkg-config is required by the engine CMake
+    - name: Install pkg-config on Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install -y pkgconfiglite
+
     - name: Configure CMake (Linux/macOS)
       if: matrix.os != 'windows-latest'
       run: >
@@ -58,7 +76,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DBUILD_BUNDLED_SDL=ON
+        -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
         -S ${{ github.workspace }}
 
     - name: Configure CMake (Windows)
@@ -66,7 +84,7 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }} \
         -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }} \
-        -DBUILD_BUNDLED_SDL=ON \
+        -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON \
         -S ${{ github.workspace }}
 
     - name: Build

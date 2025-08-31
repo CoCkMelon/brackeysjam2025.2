@@ -13,6 +13,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Options
 option(BUILD_BUNDLED_SDL "Fetch and build SDL3 from source and link statically" OFF)
+option(BUILD_BUNDLED_SDL_IMAGE "Fetch and build SDL_image from source and link statically" OFF)
+option(BUILD_BUNDLED_SDL_TTF "Fetch and build SDL_ttf from source and link statically" OFF)
 
 # Sanitizer options
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -87,6 +89,56 @@ if(BUILD_BUNDLED_SDL)
   if(DEFINED sdl3_BINARY_DIR AND EXISTS "${sdl3_BINARY_DIR}")
     set(SDL3_DIR "${sdl3_BINARY_DIR}" CACHE PATH "Path to SDL3Config.cmake for bundled SDL" FORCE)
     list(APPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
+  endif()
+endif()
+
+# Optionally fetch and build SDL_image from source as a static library
+if(BUILD_BUNDLED_SDL_IMAGE)
+  message(STATUS "BUILD_BUNDLED_SDL_IMAGE=ON: Fetching and building SDL_image from source (static)")
+  set(SDLIMAGE_INSTALL OFF CACHE BOOL "" FORCE)
+  set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
+  set(SDLIMAGE_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+  # Enable common formats and use vendored deps to avoid system packages
+  set(SDLIMAGE_PNG ON CACHE BOOL "" FORCE)
+  set(SDLIMAGE_PNG_VENDORED ON CACHE BOOL "" FORCE)
+  set(SDLIMAGE_JPG ON CACHE BOOL "" FORCE)
+  set(SDLIMAGE_JPG_VENDORED ON CACHE BOOL "" FORCE)
+  set(SDLIMAGE_WEBP ON CACHE BOOL "" FORCE)
+  set(SDLIMAGE_WEBP_VENDORED ON CACHE BOOL "" FORCE)
+
+  FetchContent_Declare(
+    SDL3_image
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_image
+    GIT_TAG release-3.2.2
+  )
+  # Ensure it sees our SDL3
+  if(DEFINED SDL3_DIR)
+    set(SDL3_DIR "${SDL3_DIR}" CACHE PATH "" FORCE)
+  endif()
+  FetchContent_MakeAvailable(SDL3_image)
+  if(DEFINED sdl3_image_BINARY_DIR AND EXISTS "${sdl3_image_BINARY_DIR}")
+    set(SDL3_image_DIR "${sdl3_image_BINARY_DIR}" CACHE PATH "Path to SDL3_imageConfig.cmake for bundled SDL_image" FORCE)
+    list(APPEND CMAKE_PREFIX_PATH "${sdl3_image_BINARY_DIR}")
+  endif()
+endif()
+
+# Optionally fetch and build SDL_ttf from source as a static library
+if(BUILD_BUNDLED_SDL_TTF)
+  message(STATUS "BUILD_BUNDLED_SDL_TTF=ON: Fetching and building SDL_ttf from source (static)")
+  set(SDLTTF_INSTALL OFF CACHE BOOL "" FORCE)
+  set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    SDL3_ttf
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf
+    GIT_TAG release-3.2.2
+  )
+  if(DEFINED SDL3_DIR)
+    set(SDL3_DIR "${SDL3_DIR}" CACHE PATH "" FORCE)
+  endif()
+  FetchContent_MakeAvailable(SDL3_ttf)
+  if(DEFINED sdl3_ttf_BINARY_DIR AND EXISTS "${sdl3_ttf_BINARY_DIR}")
+    set(SDL3_ttf_DIR "${sdl3_ttf_BINARY_DIR}" CACHE PATH "Path to SDL3_ttfConfig.cmake for bundled SDL_ttf" FORCE)
+    list(APPEND CMAKE_PREFIX_PATH "${sdl3_ttf_BINARY_DIR}")
   endif()
 endif()
 
