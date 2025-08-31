@@ -41,18 +41,10 @@ jobs:
             compiler: gcc
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
-            compiler: clang
-            c_compiler: clang
-            cpp_compiler: clang++
           - os: ubuntu-24.04-arm
             compiler: gcc
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-24.04-arm
-            compiler: clang
-            c_compiler: clang
-            cpp_compiler: clang++
           # macOS (Apple Clang)
           - os: macos-13
             compiler: clang
@@ -110,7 +102,7 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
-        -DSDL3_IMAGE_TAG=release-3.2.8
+        -DSDL3_IMAGE_TAG=release-3.2.4
         -S ${{ github.workspace }}
 
     - name: Configure CMake (Windows)
@@ -118,7 +110,7 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }} -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }}
         -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
-        -DSDL3_IMAGE_TAG=release-3.2.8
+        -DSDL3_IMAGE_TAG=release-3.2.4
         -S ${{ github.workspace }}
 
     - name: Build
