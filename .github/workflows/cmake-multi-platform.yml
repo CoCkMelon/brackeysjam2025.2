@@ -55,7 +55,8 @@ jobs:
         sudo apt-get install -y \
           libdrm-dev libgbm-dev libudev-dev \
           libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
-          libpulse-dev libpipewire-0.3-dev
+          libpulse-dev libpipewire-0.3-dev \
+          libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxfixes-dev
 
     - name: Set reusable strings
       id: strings

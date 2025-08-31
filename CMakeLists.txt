@@ -66,6 +66,8 @@ include(FetchContent)
 # Optionally fetch and build SDL3 from source as a static library
 if(BUILD_BUNDLED_SDL)
   message(STATUS "BUILD_BUNDLED_SDL=ON: Fetching and building SDL3 from source (static)")
+  # Allow overriding the exact SDL tags to keep compatibility with add-on libs
+  set(SDL3_TAG "release-3.2.6" CACHE STRING "Git tag/branch for SDL3")
   # Configure SDL3 build options
   set(SDL_SHARED OFF CACHE BOOL "" FORCE)
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
@@ -82,7 +84,7 @@ if(BUILD_BUNDLED_SDL)
   FetchContent_Declare(
     SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL
-    GIT_TAG release-3.2.2
+    GIT_TAG ${SDL3_TAG}
   )
   FetchContent_MakeAvailable(SDL3)
   # Make SDL3 discoverable by subprojects that use find_package(SDL3)
@@ -106,10 +108,11 @@ if(BUILD_BUNDLED_SDL_IMAGE)
   set(SDLIMAGE_WEBP ON CACHE BOOL "" FORCE)
   set(SDLIMAGE_WEBP_VENDORED ON CACHE BOOL "" FORCE)
 
+  set(SDL3_IMAGE_TAG "release-3.2.6" CACHE STRING "Git tag/branch for SDL_image")
   FetchContent_Declare(
     SDL3_image
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_image
-    GIT_TAG release-3.2.2
+    GIT_TAG ${SDL3_IMAGE_TAG}
   )
   # Ensure it sees our SDL3
   if(DEFINED SDL3_DIR)
@@ -127,10 +130,11 @@ if(BUILD_BUNDLED_SDL_TTF)
   message(STATUS "BUILD_BUNDLED_SDL_TTF=ON: Fetching and building SDL_ttf from source (static)")
   set(SDLTTF_INSTALL OFF CACHE BOOL "" FORCE)
   set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
+  set(SDL3_TTF_TAG "release-3.2.2" CACHE STRING "Git tag/branch for SDL_ttf")
   FetchContent_Declare(
     SDL3_ttf
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf
-    GIT_TAG release-3.2.2
+    GIT_TAG ${SDL3_TTF_TAG}
   )
   if(DEFINED SDL3_DIR)
     set(SDL3_DIR "${SDL3_DIR}" CACHE PATH "" FORCE)
