@@ -92,10 +92,14 @@ jobs:
     - name: Install tools on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        choco install -y pkgconfiglite nasm sdl
+        choco install -y pkgconfiglite nasm
 
+    # --- FIX: Add SDL3_DIR to point to the bundled SDL3 build directory ---
     - name: Configure CMake (Linux/macOS)
       if: matrix.os != 'windows-latest'
+      env:
+        # Prepend the SDL3 build directory to SDL3_DIR
+        SDL3_DIR: "${{ steps.strings.outputs.build-output-dir }}/_deps/sdl3-build"
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
@@ -107,6 +111,9 @@ jobs:
 
     - name: Configure CMake (Windows)
       if: matrix.os == 'windows-latest'
+      env:
+        # Use Windows-style path with backslashes (CMake accepts both)
+        SDL3_DIR: "${{ steps.strings.outputs.build-output-dir }}\_deps\\sdl3-build"
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }} -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }}
         -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
