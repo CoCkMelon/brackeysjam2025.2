@@ -92,7 +92,7 @@ jobs:
     - name: Install tools on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        choco install -y pkgconfiglite nasm
+        choco install -y pkgconfiglite nasm sdl3 sdl3_image sdl3_ttf
 
     - name: Configure CMake (Linux/macOS)
       if: matrix.os != 'windows-latest'
