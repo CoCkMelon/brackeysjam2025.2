@@ -108,7 +108,15 @@ if(BUILD_BUNDLED_SDL_IMAGE)
   set(SDLIMAGE_WEBP ON CACHE BOOL "" FORCE)
   set(SDLIMAGE_WEBP_VENDORED ON CACHE BOOL "" FORCE)
 
-  set(SDL3_IMAGE_TAG "release-3.2.6" CACHE STRING "Git tag/branch for SDL_image")
+  # Robustly avoid broken tag if set elsewhere
+  if(DEFINED SDL3_IMAGE_TAG)
+    if(SDL3_IMAGE_TAG STREQUAL "release-3.2.6")
+      message(WARNING "Overriding broken SDL3_IMAGE_TAG=release-3.2.6 to release-3.2.8")
+      set(SDL3_IMAGE_TAG "release-3.2.8" CACHE STRING "Git tag/branch for SDL_image" FORCE)
+    endif()
+  else()
+    set(SDL3_IMAGE_TAG "release-3.2.8" CACHE STRING "Git tag/branch for SDL_image")
+  endif()
   FetchContent_Declare(
     SDL3_image
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_image

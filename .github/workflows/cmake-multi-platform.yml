@@ -13,34 +13,58 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
+        compiler: [gcc, clang, msvc]
         build_type: [Release]
-        include:
-          # Ubuntu x86_64 - GNU
+        exclude:
+          # Windows only supports msvc
+          - os: windows-latest
+            compiler: gcc
+          - os: windows-latest
+            compiler: clang
+          # Linux does not support msvc
           - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-          # Ubuntu x86_64 - Clang
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
-          # Ubuntu ARM64 - GNU
+            compiler: msvc
           - os: ubuntu-24.04-arm
-            c_compiler: gcc
-            cpp_compiler: g++
-          # Ubuntu ARM64 - Clang
-          - os: ubuntu-24.04-arm
-            c_compiler: clang
-            cpp_compiler: clang++
-          # macOS Intel (macos-13) - Apple Clang
+            compiler: msvc
+          # macOS uses Apple Clang
           - os: macos-13
+            compiler: gcc
+          - os: macos-13
+            compiler: msvc
+          - os: macos-14
+            compiler: gcc
+          - os: macos-14
+            compiler: msvc
+        include:
+          # Linux GNU/Clang
+          - os: ubuntu-latest
+            compiler: gcc
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-latest
+            compiler: clang
             c_compiler: clang
             cpp_compiler: clang++
-          # macOS Apple Silicon (macos-14) - Apple Clang
+          - os: ubuntu-24.04-arm
+            compiler: gcc
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-24.04-arm
+            compiler: clang
+            c_compiler: clang
+            cpp_compiler: clang++
+          # macOS (Apple Clang)
+          - os: macos-13
+            compiler: clang
+            c_compiler: clang
+            cpp_compiler: clang++
           - os: macos-14
+            compiler: clang
             c_compiler: clang
             cpp_compiler: clang++
           # Windows MSVC (use VS generator)
           - os: windows-latest
+            compiler: msvc
             vs_generator: "Visual Studio 17 2022"
             arch: x64
 
@@ -56,7 +80,15 @@ jobs:
           libdrm-dev libgbm-dev libudev-dev \
           libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
           libpulse-dev libpipewire-0.3-dev \
-          libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxfixes-dev
+          libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxfixes-dev \
+          nasm
+
+    # macOS build tools (nasm for libjpeg-turbo)
+    - name: Install macOS build tools
+      if: startsWith(matrix.os, 'macos-')
+      run: |
+        brew update
+        brew install nasm
 
     - name: Set reusable strings
       id: strings
@@ -64,11 +96,11 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    # Windows: pkg-config is required by the engine CMake
-    - name: Install pkg-config on Windows
+    # Windows: pkg-config is required by the engine CMake; nasm for libjpeg-turbo
+    - name: Install tools on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        choco install -y pkgconfiglite
+        choco install -y pkgconfiglite nasm
 
     - name: Configure CMake (Linux/macOS)
       if: matrix.os != 'windows-latest'
@@ -78,14 +110,15 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
+        -DSDL3_IMAGE_TAG=release-3.2.8
         -S ${{ github.workspace }}
 
     - name: Configure CMake (Windows)
       if: matrix.os == 'windows-latest'
       run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }} \
-        -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }} \
-        -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON \
+        cmake -B ${{ steps.strings.outputs.build-output-dir }} -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }}
+        -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
+        -DSDL3_IMAGE_TAG=release-3.2.8
         -S ${{ github.workspace }}
 
     - name: Build

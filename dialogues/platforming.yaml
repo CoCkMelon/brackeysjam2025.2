@@ -1,0 +1,26 @@
+title: "platforming"
+lines:
+  - id: start
+    speaker: Venera
+    text: "Ah. I like jumps"
+    trigger: "unlock_car_jump"
+  - speaker: Glitcher
+    text: "Are you sure"
+  - speaker: Venera
+    text: "that it is fun?"
+  - speaker: Venera
+    text: "With sufficient skill"
+  - speaker: Venera
+    text: "anything can be fun."
+  - speaker: Glitcher
+    text: "'Anything' is a key word"
+  - speaker: Glitcher
+    text: "here. But I enjoy jumps."
+  - speaker: Glitcher
+    text: "Feeling of road on wheels."
+  - speaker: Glitcher
+    text: "Hops and dreams."
+  - speaker: Glitcher
+    text: "But I like food more."
+  - speaker: Glitcher
+    text: "When we are going to eat more?"
