@@ -22,9 +22,15 @@ static const AmeDialogueScene scene_annoying = { .scene="annoying", .lines=annoy
 static const AmeDialogueLine introduction_lines[] = {
     { "start", "Glitcher", "Hi. Press ENTER to proceed.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
     { NULL, "Glitcher", "How is your day?", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
-    { NULL, "Glitcher", "Controls are WS, or up-down acceleration", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
-    { NULL, "Glitcher", "AD, left-right yaw", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "WS/up-down acceleration", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "AD/left-right yaw", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
     { NULL, "Glitcher", "So. We have a good life over there.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "I want more.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "Go to the right.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "My forward.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "I just met Venera.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "She is a pro driver.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
+    { NULL, "Glitcher", "Press E to switch character.", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
     { "end", "Guide", "Okay, have fun!", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0 },
 };
 

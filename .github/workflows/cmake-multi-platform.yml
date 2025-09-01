@@ -73,20 +73,20 @@ jobs:
           libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
           libpulse-dev libpipewire-0.3-dev \
           libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxfixes-dev \
-          nasm
+          nasm ninja-build
 
     # macOS build tools (nasm for libjpeg-turbo)
     - name: Install macOS build tools
       if: startsWith(matrix.os, 'macos-')
       run: |
         brew update
-        brew install nasm
+        brew install nasm ninja
 
     - name: Set reusable strings
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build-static" >> "$GITHUB_OUTPUT"
 
     # Windows: pkg-config is required by the engine CMake; nasm for libjpeg-turbo
     - name: Install tools on Windows
@@ -94,31 +94,35 @@ jobs:
       run: |
         choco install -y pkgconfiglite nasm
 
-    # --- FIX: Add SDL3_DIR to point to the bundled SDL3 build directory ---
-    - name: Configure CMake (Linux/macOS)
-      if: matrix.os != 'windows-latest'
-      env:
-        # Prepend the SDL3 build directory to SDL3_DIR
-        SDL3_DIR: "${{ steps.strings.outputs.build-output-dir }}/_deps/sdl3-build"
+    - name: Configure CMake (Linux - static)
+      if: startsWith(matrix.os, 'ubuntu-')
       run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
-        -DSDL3_IMAGE_TAG=release-3.2.4
-        -S ${{ github.workspace }}
+        cmake -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }} -GNinja 
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
+        -DBUILD_SHARED_LIBS=OFF 
+        -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
+        -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} 
+        -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
 
-    - name: Configure CMake (Windows)
-      if: matrix.os == 'windows-latest'
-      env:
-        # Use Windows-style path with backslashes (CMake accepts both)
-        SDL3_DIR: "${{ steps.strings.outputs.build-output-dir }}\_deps\\sdl3-build"
+    - name: Configure CMake (macOS - static)
+      if: startsWith(matrix.os, 'macos-')
       run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }} -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }}
-        -DBUILD_BUNDLED_SDL=ON -DBUILD_BUNDLED_SDL_IMAGE=ON -DBUILD_BUNDLED_SDL_TTF=ON
-        -DSDL3_IMAGE_TAG=release-3.2.4
-        -S ${{ github.workspace }}
+        cmake -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }} -GNinja 
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
+        -DBUILD_SHARED_LIBS=OFF 
+        -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
+        -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON
+
+    - name: Configure CMake (Windows - static)
+      if: matrix.os == 'windows-latest'
+      run: >
+        cmake -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }} 
+        -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }} 
+        -DBUILD_SHARED_LIBS=OFF 
+        -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
+        -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
+        -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
@@ -127,10 +131,10 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: ctest --build-config ${{ matrix.build_type }}
 
-    - name: Copy Assets to Build Directory
+    - name: Copy assets to Build Directory
       shell: bash
       run: |
-        cp -r ${{ github.workspace }}/Assets ${{ steps.strings.outputs.build-output-dir }}/Assets
+        cp -r ${{ github.workspace }}/assets ${{ steps.strings.outputs.build-output-dir }}/assets
 
     - name: Create Zip Archive
       shell: bash

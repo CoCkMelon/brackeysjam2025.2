@@ -1,4 +1,10 @@
+# Enforce IPO/LTO policy by default even in subprojects
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW CACHE STRING "" FORCE)
 cmake_minimum_required(VERSION 3.21)
+# Ensure IPO/LTO policy is enforced so INTERPROCEDURAL_OPTIMIZATION takes effect
+if(POLICY CMP0069)
+  cmake_policy(SET CMP0069 NEW)
+endif()
 project(sidescroller_racer C CXX)
 
 # Configure C/C++ standards (similar to ./trash/CMakeLists.txt)
@@ -11,6 +17,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Global optimizations
+# Enable LTO/IPO where supported (especially for Release/MinSizeRel)
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+if(ipo_supported)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+endif()
+# Strong optimization defaults for Release-like configs
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--as-needed" CACHE STRING "" FORCE)
+
 # Platform-specific baseline tweaks
 if(MINGW)
   # Avoid Windows macro pollution and enable lean headers
@@ -19,10 +37,11 @@ if(MINGW)
   add_compile_options(-finput-charset=UTF-8 -fexec-charset=UTF-8)
 endif()
 
-# Options
-option(BUILD_BUNDLED_SDL "Fetch and build SDL3 from source and link statically" OFF)
-option(BUILD_BUNDLED_SDL_IMAGE "Fetch and build SDL_image from source and link statically" OFF)
-option(BUILD_BUNDLED_SDL_TTF "Fetch and build SDL_ttf from source and link statically" OFF)
+# Project-local SDL knobs are removed to avoid alias collisions and defer to engine settings.
+# If you need to control SDL (static/shared, fetching, etc.), configure the engine via:
+#   -DAME_PREFER_STATIC_SDL=ON    (prefer static targets if available)
+#   -DAME_FETCH_STATIC_SDL=ON     (fetch static SDL if static not available)
+#   -DAME_FORCE_STATIC_SDL=ON     (force static and fetch if needed)
 
 # Sanitizer options
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -71,104 +90,13 @@ add_compile_definitions(_GNU_SOURCE)
 
 include(FetchContent)
 
-# Optionally fetch and build SDL3 from source as a static library
-if(BUILD_BUNDLED_SDL)
-  message(STATUS "BUILD_BUNDLED_SDL=ON: Fetching and building SDL3 from source (static)")
-  # Allow overriding the exact SDL tags to keep compatibility with add-on libs
-  set(SDL3_TAG "release-3.2.6" CACHE STRING "Git tag/branch for SDL3")
-  # Configure SDL3 build options
-  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-  set(SDL_STATIC ON CACHE BOOL "" FORCE)
-  set(SDL_TEST OFF CACHE BOOL "" FORCE)
-  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
-  # Linux backends
-  if(UNIX AND NOT APPLE)
-    set(SDL_WAYLAND ON CACHE BOOL "Enable SDL Wayland video backend" FORCE)
-    set(SDL_KMSDRM ON CACHE BOOL "Enable SDL KMSDRM video backend" FORCE)
-  endif()
-  # Some platforms require this to export alias target SDL3::SDL3
-  set(SDL_HIDESYSTEMHEADERS OFF CACHE BOOL "" FORCE)
+# SDL3 is configured by the engine. Avoid fetching or finding SDL here to prevent
+# duplicate provider/alias conflicts. The engine will export the proper SDL targets
+# transitively to our game through the 'ame' target.
 
-  # Prefer config packages when resolving SDL add-ons
-  set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
+# SDL_image is configured by the engine; do not fetch here to avoid conflicting targets.
 
-  FetchContent_Declare(
-    SDL3
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL
-    GIT_TAG ${SDL3_TAG}
-  )
-  FetchContent_MakeAvailable(SDL3)
-  # Make SDL3 discoverable by subprojects that use find_package(SDL3)
-  if(DEFINED sdl3_BINARY_DIR AND EXISTS "${sdl3_BINARY_DIR}")
-    # Clear any stale cache entry from previous builds (e.g., different workspace)
-    unset(SDL3_DIR CACHE)
-    set(SDL3_DIR "${sdl3_BINARY_DIR}" CACHE PATH "Path to SDL3Config.cmake for bundled SDL" FORCE)
-    # Ensure our SDL3 takes precedence over any older paths
-    list(PREPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
-  endif()
-endif()
-
-# Optionally fetch and build SDL_image from source as a static library
-if(BUILD_BUNDLED_SDL_IMAGE)
-  message(STATUS "BUILD_BUNDLED_SDL_IMAGE=ON: Fetching and building SDL_image from source (static)")
-  set(SDLIMAGE_INSTALL OFF CACHE BOOL "" FORCE)
-  set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
-  set(SDLIMAGE_DEPS_SHARED OFF CACHE BOOL "" FORCE)
-  # Enable common formats and use vendored deps to avoid system packages
-  set(SDLIMAGE_PNG ON CACHE BOOL "" FORCE)
-  set(SDLIMAGE_PNG_VENDORED ON CACHE BOOL "" FORCE)
-  set(SDLIMAGE_JPG ON CACHE BOOL "" FORCE)
-  set(SDLIMAGE_JPG_VENDORED ON CACHE BOOL "" FORCE)
-  set(SDLIMAGE_WEBP ON CACHE BOOL "" FORCE)
-  set(SDLIMAGE_WEBP_VENDORED ON CACHE BOOL "" FORCE)
-
-  # Robustly avoid broken tag if set elsewhere
-  if(DEFINED SDL3_IMAGE_TAG)
-    if(SDL3_IMAGE_TAG STREQUAL "release-3.2.6")
-      message(WARNING "Overriding broken SDL3_IMAGE_TAG=release-3.2.6 to release-3.2.8")
-      set(SDL3_IMAGE_TAG "release-3.2.8" CACHE STRING "Git tag/branch for SDL_image" FORCE)
-    endif()
-  else()
-    set(SDL3_IMAGE_TAG "release-3.2.8" CACHE STRING "Git tag/branch for SDL_image")
-  endif()
-  FetchContent_Declare(
-    SDL3_image
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL_image
-    GIT_TAG ${SDL3_IMAGE_TAG}
-  )
-  # Ensure it sees our SDL3 (override any stale cache path)
-  if(DEFINED sdl3_BINARY_DIR AND EXISTS "${sdl3_BINARY_DIR}")
-    unset(SDL3_DIR CACHE)
-    set(SDL3_DIR "${sdl3_BINARY_DIR}" CACHE PATH "Path to SDL3Config.cmake for bundled SDL" FORCE)
-    list(PREPEND CMAKE_PREFIX_PATH "${sdl3_BINARY_DIR}")
-  endif()
-  FetchContent_MakeAvailable(SDL3_image)
-  if(DEFINED sdl3_image_BINARY_DIR AND EXISTS "${sdl3_image_BINARY_DIR}")
-    set(SDL3_image_DIR "${sdl3_image_BINARY_DIR}" CACHE PATH "Path to SDL3_imageConfig.cmake for bundled SDL_image" FORCE)
-    list(PREPEND CMAKE_PREFIX_PATH "${sdl3_image_BINARY_DIR}")
-  endif()
-endif()
-
-# Optionally fetch and build SDL_ttf from source as a static library
-if(BUILD_BUNDLED_SDL_TTF)
-  message(STATUS "BUILD_BUNDLED_SDL_TTF=ON: Fetching and building SDL_ttf from source (static)")
-  set(SDLTTF_INSTALL OFF CACHE BOOL "" FORCE)
-  set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
-  set(SDL3_TTF_TAG "release-3.2.2" CACHE STRING "Git tag/branch for SDL_ttf")
-  FetchContent_Declare(
-    SDL3_ttf
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf
-    GIT_TAG ${SDL3_TTF_TAG}
-  )
-  if(DEFINED SDL3_DIR)
-    set(SDL3_DIR "${SDL3_DIR}" CACHE PATH "" FORCE)
-  endif()
-  FetchContent_MakeAvailable(SDL3_ttf)
-  if(DEFINED sdl3_ttf_BINARY_DIR AND EXISTS "${sdl3_ttf_BINARY_DIR}")
-    set(SDL3_ttf_DIR "${sdl3_ttf_BINARY_DIR}" CACHE PATH "Path to SDL3_ttfConfig.cmake for bundled SDL_ttf" FORCE)
-    list(APPEND CMAKE_PREFIX_PATH "${sdl3_ttf_BINARY_DIR}")
-  endif()
-endif()
+# SDL_ttf: only add a minimal linkage below if the engine doesn't provide it.
 
 # Ensure engine only builds what we actually use
 set(AME_BUILD_EXAMPLES OFF CACHE BOOL "Disable engine examples" FORCE)
@@ -230,75 +158,27 @@ if(ame_engine_SOURCE_DIR)
   target_include_directories(game PRIVATE ${ame_engine_SOURCE_DIR}/third_party)
 endif()
 
-# Link with engine C API targets (avoid facade, but link libs it provides)
-# If BUILD_BUNDLED_SDL is ON, SDL3::SDL3 will be provided by the fetched SDL
-set(_ame_targets
-  SDL3::SDL3
-  Threads::Threads
+# Link against engine and its exported dependencies; avoid direct SDL target handling here.
+set(_game_link_targets
   ame
-  SDL3_image::SDL3_image
-  SDL3_ttf::SDL3_ttf
   glad
   box2d
 )
-foreach(tgt IN LISTS _ame_targets)
+# Threads are generally needed; prefer a found package but don't fail if already transitively linked
+find_package(Threads REQUIRED)
+list(APPEND _game_link_targets Threads::Threads)
+
+foreach(tgt IN LISTS _game_link_targets)
   if(TARGET ${tgt})
     target_link_libraries(game PRIVATE ${tgt})
     message(STATUS "Linking game against: ${tgt}")
   endif()
 endforeach()
 
-# When statically linking SDL, ensure required platform libs are present
-if(BUILD_BUNDLED_SDL)
-  if(UNIX AND NOT APPLE)
-    find_package(Threads REQUIRED)
-    target_link_libraries(game PRIVATE Threads::Threads m dl)
-  elseif(MINGW)
-    # With static SDL on Windows/MinGW, explicitly link required system libs
-    # This list mirrors what SDL expects when not using a shared SDL3
-    target_link_libraries(game PRIVATE
-      user32
-      gdi32
-      winmm
-      imm32
-      setupapi
-      version
-      shell32
-      ole32
-      oleaut32
-      uuid
-      advapi32
-      ws2_32
-      bcrypt
-      iphlpapi
-    )
-    # Optionally enable static libgcc/std++ if you want a fully static runtime
-    # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
-  endif()
-endif()
+# Platform libs are handled by the engine and SDL packages; no project-local static SDL wiring here.
 
-# Also try to link against SDL3_ttf for systems where SDL_ttf is provided as SDL3
-# Prefer pkg-config if available to pick up proper include and library paths
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-  pkg_check_modules(SDL3TTF QUIET sdl3_ttf)
-  if(SDL3TTF_FOUND)
-    message(STATUS "Found SDL3_ttf via pkg-config: ${SDL3TTF_VERSION}")
-    target_include_directories(game PRIVATE ${SDL3TTF_INCLUDE_DIRS})
-    if(SDL3TTF_LIBRARY_DIRS)
-      target_link_directories(game PRIVATE ${SDL3TTF_LIBRARY_DIRS})
-    endif()
-    target_link_libraries(game PRIVATE ${SDL3TTF_LIBRARIES})
-  else()
-    # Fallback to linking by name; many distros provide -lSDL3_ttf
-    message(STATUS "pkg-config sdl3_ttf not found; linking SDL3_ttf by name")
-    target_link_libraries(game PRIVATE SDL3_ttf)
-  endif()
-else()
-  # If pkg-config isn't available, try a simple link by name
-  message(STATUS "PkgConfig not found; linking SDL3_ttf by name")
-  target_link_libraries(game PRIVATE SDL3_ttf)
-endif()
+# Note: Avoid linking SDL3_ttf here to prevent pulling in shared libSDL3_ttf.
+# The engine should link SDL_ttf when needed (and select static variants via AME_FORCE_STATIC_SDL).
 
 # Avoid accidental linkage against unitylike/flecs if present in the superproject
 if(TARGET unitylike)
@@ -308,12 +188,6 @@ if(TARGET flecs)
   message(STATUS "Not linking flecs (explicitly disabled)")
 endif()
 
-# Ensure _GNU_SOURCE on imported targets
-foreach(tgt IN LISTS _ame_targets)
-  if(TARGET ${tgt})
-    target_compile_definitions(${tgt} PRIVATE _GNU_SOURCE)
-  endif()
-endforeach()
 
 # If asyncinput is available, include and link
 # Prefer include dir exported by the engine if present, otherwise fall back to FetchContent path
@@ -322,12 +196,13 @@ if(DEFINED asyncinput_SOURCE_DIR AND EXISTS "${asyncinput_SOURCE_DIR}/include")
 elseif(EXISTS "${CMAKE_BINARY_DIR}/_deps/asyncinput-src/include")
   target_include_directories(game PRIVATE "${CMAKE_BINARY_DIR}/_deps/asyncinput-src/include")
 endif()
-if(TARGET asyncinput_shared)
-  target_link_libraries(game PRIVATE asyncinput_shared)
-  target_compile_definitions(asyncinput_shared PRIVATE _GNU_SOURCE)
-elseif(TARGET asyncinput_static)
+# Prefer static asyncinput when available
+if(TARGET asyncinput_static)
   target_link_libraries(game PRIVATE asyncinput_static)
   target_compile_definitions(asyncinput_static PRIVATE _GNU_SOURCE)
+elseif(TARGET asyncinput_shared)
+  target_link_libraries(game PRIVATE asyncinput_shared)
+  target_compile_definitions(asyncinput_shared PRIVATE _GNU_SOURCE)
 endif()
 
 # Install
