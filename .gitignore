@@ -1,11 +1,33 @@
+# Build directories
 build/
+build-*/
+cmake-build-*/
+bin/
+lib/
+
+# CMake-generated files
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+Makefile
+install_manifest.txt
 compile_commands.json
+
+# FetchContent/External deps inside build trees
+**/_deps/
+
+# IDE/cache and misc
 .cache/
 *.o
+*.obj
 *.exe
 *.log
-*swp
-*fuse
+*.swp
+
+# Filesystem
+.fuse-hidden*
+
+*~
+*blend1
