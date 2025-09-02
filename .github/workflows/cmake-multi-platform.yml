@@ -80,13 +80,12 @@ jobs:
         "${{ github.workspace }}/.venv/bin/python" -m pip install --upgrade pip
         "${{ github.workspace }}/.venv/bin/python" -m pip install pyyaml
 
-    - name: Set up Python venv and install PyYAML (Windows)
+    - name: Install PyYAML (Windows)
       if: matrix.os == 'windows-latest'
       shell: powershell
       run: |
-        python -m venv "$env:GITHUB_WORKSPACE\.venv"
-        "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -m pip install --upgrade pip
-        "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -m pip install pyyaml
+        python -m pip install --upgrade pip
+        python -m pip install pyyaml
 
     # Set up MSVC environment so cl.exe is available in PATH
     - name: Setup MSVC Developer Command Prompt
@@ -230,7 +229,6 @@ jobs:
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
         -DASYNCINPUT_BUILD_SHARED=OFF -DFLECS_SHARED=OFF -DFLECS_STATIC=ON 
         -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded 
-        -DPython3_EXECUTABLE=${{ github.workspace }}\\.venv\\Scripts\\python.exe 
         -DSDL3_DIR=${{ env.SDL3_DIR_WIN }} -DCMAKE_PREFIX_PATH=${{ env.SDL3_DIR_WIN }} 
         -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\\scripts\\buildsystems\\vcpkg.cmake
 
