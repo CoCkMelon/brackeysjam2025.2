@@ -41,10 +41,18 @@ jobs:
             compiler: gcc
             c_compiler: gcc
             cpp_compiler: g++
+          - os: ubuntu-latest
+            compiler: clang
+            c_compiler: clang
+            cpp_compiler: clang++
           - os: ubuntu-24.04-arm
             compiler: gcc
             c_compiler: gcc
             cpp_compiler: g++
+          - os: ubuntu-24.04-arm
+            compiler: clang
+            c_compiler: clang
+            cpp_compiler: clang++
           # macOS (Apple Clang)
           - os: macos-13
             compiler: clang
@@ -92,14 +100,14 @@ jobs:
           libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxfixes-dev \
           libgl1-mesa-dev libglu1-mesa-dev \
           libfreetype6-dev libharfbuzz-dev \
-          portaudio19-dev libopus-dev \
+          portaudio19-dev libopus-dev libopusfile-dev \
           nasm ninja-build
     # macOS build tools (nasm for libjpeg-turbo)
     - name: Install macOS build tools
       if: startsWith(matrix.os, 'macos-')
       run: |
         brew update
-        brew install nasm ninja pkg-config portaudio opus freetype harfbuzz
+        brew install nasm ninja pkg-config portaudio opus opusfile freetype harfbuzz
 
     - name: Set reusable strings
       id: strings
@@ -123,9 +131,10 @@ jobs:
         git clone https://github.com/microsoft/vcpkg.git "$Env:USERPROFILE\\vcpkg"
         & "$Env:USERPROFILE\\vcpkg\\bootstrap-vcpkg.bat"
         # Install static libs
-        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install portaudio opus --triplet x64-windows-static
-        # Expose VCPKG_ROOT for later steps
+        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install portaudio opus opusfile --triplet x64-windows-static
+        # Expose VCPKG_ROOT and PKG_CONFIG_PATH for later steps (pkgconfiglite)
         echo "VCPKG_ROOT=$Env:USERPROFILE\\vcpkg" >> $Env:GITHUB_ENV
+        echo "PKG_CONFIG_PATH=$Env:USERPROFILE\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig;$Env:USERPROFILE\\vcpkg\\installed\\x64-windows-static\\share\\pkgconfig" >> $Env:GITHUB_ENV
 
     - name: Verify toolchain (Linux/macOS)
       if: matrix.os != 'windows-latest'
@@ -140,6 +149,7 @@ jobs:
         echo "=== pkg-config ===" && pkg-config --version || true
         echo "=== PortAudio ===" && (pkg-config --modversion portaudio-2.0 && echo OK) || echo "PortAudio not found"
         echo "=== Opus ===" && (pkg-config --modversion opus && echo OK) || echo "Opus not found"
+        echo "=== Opusfile ===" && (pkg-config --modversion opusfile && echo OK) || echo "Opusfile not found"
 
     - name: Verify toolchain (Windows)
       if: matrix.os == 'windows-latest'
@@ -150,18 +160,23 @@ jobs:
         Write-Host '=== NASM ==='; where nasm; if ($?) { nasm -v } else { Write-Host 'nasm not found' }
         Write-Host '=== YASM ==='; where yasm; if ($?) { yasm --version } else { Write-Host 'yasm not found' }
         Write-Host '=== vcpkg root ==='; Write-Host $Env:VCPKG_ROOT
+        Write-Host '=== PKG_CONFIG_PATH ==='; Write-Host $Env:PKG_CONFIG_PATH
+        Write-Host '=== pkg-config portaudio-2.0 ==='; pkg-config --modversion portaudio-2.0
+        Write-Host '=== pkg-config opus ==='; pkg-config --modversion opus
+        Write-Host '=== pkg-config opusfile ==='; pkg-config --modversion opusfile
 
     - name: Configure CMake (Linux - static)
       if: startsWith(matrix.os, 'ubuntu-')
       env:
         SDL3_DIR: "${{ steps.strings.outputs.build-output-dir }}/_deps/sdl3-build"
+        CC: ${{ matrix.c_compiler }}
+        CXX: ${{ matrix.cpp_compiler }}
       run: >
         cmake -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }} -GNinja 
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
         -DBUILD_SHARED_LIBS=OFF 
         -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} 
         -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" 
         -DSDL3_DIR=${SDL3_DIR} -DCMAKE_PREFIX_PATH=${SDL3_DIR}
 
