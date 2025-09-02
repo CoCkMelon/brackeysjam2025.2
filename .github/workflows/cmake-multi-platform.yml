@@ -99,7 +99,7 @@ jobs:
           libpulse-dev libpipewire-0.3-dev \
           libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxfixes-dev \
           libgl1-mesa-dev libglu1-mesa-dev \
-          libfreetype6-dev libharfbuzz-dev \
+          libfreetype6-dev libharfbuzz-dev libglm-dev \
           portaudio19-dev libopus-dev libopusfile-dev \
           nasm ninja-build
     # macOS build tools (nasm for libjpeg-turbo)
@@ -107,7 +107,7 @@ jobs:
       if: startsWith(matrix.os, 'macos-')
       run: |
         brew update
-        brew install nasm ninja pkg-config portaudio opus opusfile freetype harfbuzz
+        brew install nasm ninja pkg-config portaudio opus opusfile freetype harfbuzz glm
 
     - name: Set reusable strings
       id: strings
@@ -131,7 +131,7 @@ jobs:
         git clone https://github.com/microsoft/vcpkg.git "$Env:USERPROFILE\\vcpkg"
         & "$Env:USERPROFILE\\vcpkg\\bootstrap-vcpkg.bat"
         # Install static libs
-        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install portaudio opus opusfile --triplet x64-windows-static
+        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install portaudio opus opusfile glm --triplet x64-windows-static
         # Expose VCPKG_ROOT and PKG_CONFIG_PATH for later steps (pkgconfiglite)
         echo "VCPKG_ROOT=$Env:USERPROFILE\\vcpkg" >> $Env:GITHUB_ENV
         echo "PKG_CONFIG_PATH=$Env:USERPROFILE\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig;$Env:USERPROFILE\\vcpkg\\installed\\x64-windows-static\\share\\pkgconfig" >> $Env:GITHUB_ENV
@@ -178,6 +178,7 @@ jobs:
         -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
         -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" 
+        -DCMAKE_C_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" -DCMAKE_CXX_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" 
         -DSDL3_DIR=${SDL3_DIR} -DCMAKE_PREFIX_PATH=${SDL3_DIR}
 
     - name: Configure CMake (macOS - static)
@@ -190,6 +191,7 @@ jobs:
         -DBUILD_SHARED_LIBS=OFF 
         -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
+        -DCMAKE_C_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" -DCMAKE_CXX_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" 
         -DSDL3_DIR=${SDL3_DIR} -DCMAKE_PREFIX_PATH=${SDL3_DIR}
 
     - name: Configure CMake (Windows - static)
