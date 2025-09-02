@@ -71,6 +71,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install PyYAML (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      shell: bash
+      run: |
+        set -e
+        python3 -m pip install --upgrade pip
+        python3 -m pip install --user pyyaml
+
+    - name: Install PyYAML (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: powershell
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install pyyaml
+
     # Set up MSVC environment so cl.exe is available in PATH
     - name: Setup MSVC Developer Command Prompt
       if: matrix.os == 'windows-latest'
@@ -232,24 +247,25 @@ jobs:
       run: |
         set -euo pipefail
         STAGE_DIR="${{ steps.strings.outputs.build-output-dir }}/pkg"
+        APP_DIR="$STAGE_DIR/BiscuitFuel"
         rm -rf "$STAGE_DIR"
-        mkdir -p "$STAGE_DIR"
+        mkdir -p "$APP_DIR"
         # Copy binary
         if [ -f "${{ steps.strings.outputs.build-output-dir }}/game" ]; then
-          cp "${{ steps.strings.outputs.build-output-dir }}/game" "$STAGE_DIR/"
+          cp "${{ steps.strings.outputs.build-output-dir }}/game" "$APP_DIR/"
         else
           echo "game binary not found in ${{ steps.strings.outputs.build-output-dir }}" >&2; exit 1
         fi
         # Copy assets
         if [ -d "${{ steps.strings.outputs.build-output-dir }}/assets" ]; then
-          cp -r "${{ steps.strings.outputs.build-output-dir }}/assets" "$STAGE_DIR/assets"
+          cp -r "${{ steps.strings.outputs.build-output-dir }}/assets" "$APP_DIR/assets"
         elif [ -d "${{ github.workspace }}/assets" ]; then
-          cp -r "${{ github.workspace }}/assets" "$STAGE_DIR/assets"
+          cp -r "${{ github.workspace }}/assets" "$APP_DIR/assets"
         else
           echo "assets directory not found" >&2; exit 1
         fi
         cd "$STAGE_DIR"
-        zip -r "${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip" .
+        zip -r "${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip" BiscuitFuel
 
     - name: Create Zip Archive (Windows)
       if: matrix.os == 'windows-latest'
@@ -258,22 +274,23 @@ jobs:
         $ErrorActionPreference = 'Stop'
         $buildDir = "${{ steps.strings.outputs.build-output-dir }}"
         $stageDir = Join-Path $buildDir 'pkg'
+        $appDir = Join-Path $stageDir 'BiscuitFuel'
         if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
-        New-Item -ItemType Directory -Path $stageDir | Out-Null
+        New-Item -ItemType Directory -Path $appDir | Out-Null
         $bin = Join-Path (Join-Path $buildDir '${{ matrix.build_type }}') 'game.exe'
         if (!(Test-Path $bin)) { Write-Error "Binary not found: $bin" }
-        Copy-Item $bin -Destination $stageDir
+        Copy-Item $bin -Destination $appDir
         $assetsSrcA = Join-Path $buildDir 'assets'
         $assetsSrcB = Join-Path '${{ github.workspace }}' 'assets'
         if (Test-Path $assetsSrcA) {
-          Copy-Item $assetsSrcA -Destination (Join-Path $stageDir 'assets') -Recurse
+          Copy-Item $assetsSrcA -Destination (Join-Path $appDir 'assets') -Recurse
         } elseif (Test-Path $assetsSrcB) {
-          Copy-Item $assetsSrcB -Destination (Join-Path $stageDir 'assets') -Recurse
+          Copy-Item $assetsSrcB -Destination (Join-Path $appDir 'assets') -Recurse
         } else {
           Write-Error 'assets directory not found'
         }
         $zipPath = Join-Path '${{ github.workspace }}' "game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip"
-        Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $zipPath -Force
+        Compress-Archive -Path $appDir -DestinationPath $zipPath -Force
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
