@@ -108,6 +108,9 @@ jobs:
       run: |
         brew update
         brew install nasm ninja pkg-config portaudio opus opusfile freetype harfbuzz glm
+        echo "BREW_PREFIX=$(brew --prefix)" >> $GITHUB_ENV
+        echo "CPLUS_INCLUDE_PATH=$(brew --prefix)/include" >> $GITHUB_ENV
+        echo "CPATH=$(brew --prefix)/include" >> $GITHUB_ENV
 
     - name: Set reusable strings
       id: strings
@@ -185,6 +188,8 @@ jobs:
       if: startsWith(matrix.os, 'macos-')
       env:
         SDL3_DIR: "${{ steps.strings.outputs.build-output-dir }}/_deps/sdl3-build"
+        CPLUS_INCLUDE_PATH: "${{ env.BREW_PREFIX }}/include"
+        CPATH: "${{ env.BREW_PREFIX }}/include"
       run: >
         cmake -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }} -GNinja 
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
@@ -215,10 +220,10 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: ctest --build-config ${{ matrix.build_type }}
 
-    - name: Copy Assets to Build Directory
+    - name: Copy assets to Build Directory
       shell: bash
       run: |
-        cp -r ${{ github.workspace }}/Assets ${{ steps.strings.outputs.build-output-dir }}/Assets
+        cp -r ${{ github.workspace }}/assets ${{ steps.strings.outputs.build-output-dir }}/assets
 
     - name: Create Zip Archive
       shell: bash

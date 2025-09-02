@@ -1,5 +1,4 @@
 #pragma once
-#include <stdatomic.h>
 #include <stdbool.h>
 #ifdef __cplusplus
 extern "C" {
