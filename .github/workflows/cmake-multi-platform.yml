@@ -149,11 +149,11 @@ jobs:
       run: |
         git clone https://github.com/microsoft/vcpkg.git "$Env:USERPROFILE\\vcpkg"
         & "$Env:USERPROFILE\\vcpkg\\bootstrap-vcpkg.bat"
-        # Install static libs
-        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install portaudio opus opusfile glm --triplet x64-windows-static
+        # Install SDL3 stack (shared) and other deps (static where appropriate) to speed up builds
+        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install sdl3 sdl3-image[libjpeg-turbo,libpng,webp] sdl3-ttf[freetype,harfbuzz] portaudio opus opusfile glm --triplet x64-windows
         # Expose VCPKG_ROOT and PKG_CONFIG_PATH for later steps (pkgconfiglite)
         echo "VCPKG_ROOT=$Env:USERPROFILE\\vcpkg" >> $Env:GITHUB_ENV
-        echo "PKG_CONFIG_PATH=$Env:USERPROFILE\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig;$Env:USERPROFILE\\vcpkg\\installed\\x64-windows-static\\share\\pkgconfig" >> $Env:GITHUB_ENV
+        echo "PKG_CONFIG_PATH=$Env:USERPROFILE\\vcpkg\\installed\\x64-windows\\lib\\pkgconfig;$Env:USERPROFILE\\vcpkg\\installed\\x64-windows\\share\\pkgconfig" >> $Env:GITHUB_ENV
 
     - name: Verify toolchain (Linux/macOS)
       if: matrix.os != 'windows-latest'
@@ -217,19 +217,15 @@ jobs:
         -DPython3_EXECUTABLE=${{ github.workspace }}/.venv/bin/python 
         -DSDL3_DIR=${SDL3_DIR} -DCMAKE_PREFIX_PATH=${SDL3_DIR}
 
-    - name: Configure CMake (Windows - static)
+    - name: Configure CMake (Windows - vcpkg SDL)
       if: matrix.os == 'windows-latest'
-      env:
-        SDL3_DIR_WIN: "${{ steps.strings.outputs.build-output-dir }}\\_deps\\sdl3-build"
       run: >
         cmake -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }} 
         -G "${{ matrix.vs_generator }}" -A ${{ matrix.arch }} 
         -DBUILD_SHARED_LIBS=OFF 
         -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
-        -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
         -DASYNCINPUT_BUILD_SHARED=OFF -DFLECS_SHARED=OFF -DFLECS_STATIC=ON 
         -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded 
-        -DSDL3_DIR=${{ env.SDL3_DIR_WIN }} -DCMAKE_PREFIX_PATH=${{ env.SDL3_DIR_WIN }} 
         -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\\scripts\\buildsystems\\vcpkg.cmake
 
     - name: Build
@@ -291,6 +287,13 @@ jobs:
           Copy-Item $assetsSrcB -Destination (Join-Path $appDir 'assets') -Recurse
         } else {
           Write-Error 'assets directory not found'
+        }
+        # Copy required SDL3 DLLs from vcpkg installation
+        $vcpkgBin = Join-Path $Env:VCPKG_ROOT 'installed/x64-windows/bin'
+        if (Test-Path $vcpkgBin) {
+          Get-ChildItem -Path $vcpkgBin -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName -Destination $appDir }
+        } else {
+          Write-Warning 'vcpkg bin directory not found; skipping DLL copy'
         }
         $zipPath = Join-Path '${{ github.workspace }}' "game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip"
         Compress-Archive -Path $appDir -DestinationPath $zipPath -Force
