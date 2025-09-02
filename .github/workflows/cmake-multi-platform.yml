@@ -209,6 +209,7 @@ jobs:
         -DBUILD_SHARED_LIBS=OFF 
         -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
+        -DASYNCINPUT_BUILD_SHARED=OFF -DFLECS_SHARED=OFF -DFLECS_STATIC=ON 
         -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded 
         -DSDL3_DIR=${{ env.SDL3_DIR_WIN }} -DCMAKE_PREFIX_PATH=${{ env.SDL3_DIR_WIN }} 
         -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\\scripts\\buildsystems\\vcpkg.cmake
@@ -225,14 +226,57 @@ jobs:
       run: |
         cp -r ${{ github.workspace }}/assets ${{ steps.strings.outputs.build-output-dir }}/assets
 
-    - name: Create Zip Archive
+    - name: Create Zip Archive (Linux/macOS)
+      if: matrix.os != 'windows-latest'
       shell: bash
       run: |
-        cd ${{ steps.strings.outputs.build-output-dir }}
-        zip -r ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip .
+        set -euo pipefail
+        STAGE_DIR="${{ steps.strings.outputs.build-output-dir }}/pkg"
+        rm -rf "$STAGE_DIR"
+        mkdir -p "$STAGE_DIR"
+        # Copy binary
+        if [ -f "${{ steps.strings.outputs.build-output-dir }}/game" ]; then
+          cp "${{ steps.strings.outputs.build-output-dir }}/game" "$STAGE_DIR/"
+        else
+          echo "game binary not found in ${{ steps.strings.outputs.build-output-dir }}" >&2; exit 1
+        fi
+        # Copy assets
+        if [ -d "${{ steps.strings.outputs.build-output-dir }}/assets" ]; then
+          cp -r "${{ steps.strings.outputs.build-output-dir }}/assets" "$STAGE_DIR/assets"
+        elif [ -d "${{ github.workspace }}/assets" ]; then
+          cp -r "${{ github.workspace }}/assets" "$STAGE_DIR/assets"
+        else
+          echo "assets directory not found" >&2; exit 1
+        fi
+        cd "$STAGE_DIR"
+        zip -r "${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip" .
+
+    - name: Create Zip Archive (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $buildDir = "${{ steps.strings.outputs.build-output-dir }}"
+        $stageDir = Join-Path $buildDir 'pkg'
+        if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
+        New-Item -ItemType Directory -Path $stageDir | Out-Null
+        $bin = Join-Path (Join-Path $buildDir '${{ matrix.build_type }}') 'game.exe'
+        if (!(Test-Path $bin)) { Write-Error "Binary not found: $bin" }
+        Copy-Item $bin -Destination $stageDir
+        $assetsSrcA = Join-Path $buildDir 'assets'
+        $assetsSrcB = Join-Path '${{ github.workspace }}' 'assets'
+        if (Test-Path $assetsSrcA) {
+          Copy-Item $assetsSrcA -Destination (Join-Path $stageDir 'assets') -Recurse
+        } elseif (Test-Path $assetsSrcB) {
+          Copy-Item $assetsSrcB -Destination (Join-Path $stageDir 'assets') -Recurse
+        } else {
+          Write-Error 'assets directory not found'
+        }
+        $zipPath = Join-Path '${{ github.workspace }}' "game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip"
+        Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $zipPath -Force
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: game-${{ matrix.os }}-${{ matrix.build_type }}
-        path: ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.build_type }}.zip
+        name: game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
+        path: ${{ github.workspace }}/game-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}.zip
