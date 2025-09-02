@@ -71,21 +71,22 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install PyYAML (Linux/macOS)
+    - name: Set up Python venv and install PyYAML (Linux/macOS)
       if: matrix.os != 'windows-latest'
       shell: bash
       run: |
-        set -e
-        python3 -m pip install --upgrade pip
-        # Use --break-system-packages to satisfy PEP 668 on macOS runners
-        python3 -m pip install --user --break-system-packages pyyaml
+        set -euo pipefail
+        python3 -m venv "${{ github.workspace }}/.venv"
+        "${{ github.workspace }}/.venv/bin/python" -m pip install --upgrade pip
+        "${{ github.workspace }}/.venv/bin/python" -m pip install pyyaml
 
-    - name: Install PyYAML (Windows)
+    - name: Set up Python venv and install PyYAML (Windows)
       if: matrix.os == 'windows-latest'
       shell: powershell
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install pyyaml
+        python -m venv "$env:GITHUB_WORKSPACE\.venv"
+        "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -m pip install --upgrade pip
+        "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -m pip install pyyaml
 
     # Set up MSVC environment so cl.exe is available in PATH
     - name: Setup MSVC Developer Command Prompt
@@ -198,6 +199,7 @@ jobs:
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
         -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" 
         -DCMAKE_C_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" -DCMAKE_CXX_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" 
+        -DPython3_EXECUTABLE=${{ github.workspace }}/.venv/bin/python 
         -DSDL3_DIR=${SDL3_DIR} -DCMAKE_PREFIX_PATH=${SDL3_DIR}
 
     - name: Configure CMake (macOS - static)
@@ -213,6 +215,7 @@ jobs:
         -DAME_BUILD_EXAMPLES=OFF -DAME_BUILD_UNITYLIKE=OFF 
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
         -DCMAKE_C_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" -DCMAKE_CXX_FLAGS="-DSDL_ENABLE_OLD_NAMES=1" 
+        -DPython3_EXECUTABLE=${{ github.workspace }}/.venv/bin/python 
         -DSDL3_DIR=${SDL3_DIR} -DCMAKE_PREFIX_PATH=${SDL3_DIR}
 
     - name: Configure CMake (Windows - static)
@@ -227,6 +230,7 @@ jobs:
         -DAME_FORCE_STATIC_SDL=ON -DAME_PREFER_STATIC_SDL=ON -DAME_FETCH_STATIC_SDL=ON 
         -DASYNCINPUT_BUILD_SHARED=OFF -DFLECS_SHARED=OFF -DFLECS_STATIC=ON 
         -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded 
+        -DPython3_EXECUTABLE=${{ github.workspace }}\\.venv\\Scripts\\python.exe 
         -DSDL3_DIR=${{ env.SDL3_DIR_WIN }} -DCMAKE_PREFIX_PATH=${{ env.SDL3_DIR_WIN }} 
         -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\\scripts\\buildsystems\\vcpkg.cmake
 
