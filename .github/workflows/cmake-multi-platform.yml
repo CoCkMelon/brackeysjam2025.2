@@ -77,7 +77,8 @@ jobs:
       run: |
         set -e
         python3 -m pip install --upgrade pip
-        python3 -m pip install --user pyyaml
+        # Use --break-system-packages to satisfy PEP 668 on macOS runners
+        python3 -m pip install --user --break-system-packages pyyaml
 
     - name: Install PyYAML (Windows)
       if: matrix.os == 'windows-latest'
