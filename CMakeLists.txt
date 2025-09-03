@@ -133,6 +133,21 @@ else()
   FetchContent_MakeAvailable(ame_engine)
 endif()
 
+# Ensure GL function pointer typedefs (PFNGL*) are available on MSVC builds of the engine by
+# force-including glad's header during compilation of the ame target. This avoids relying on
+# platform-specific GL headers and fixes missing PFNGL* typedefs in engine sources like gl_loader.h.
+if(TARGET ame)
+  if(MSVC)
+    # Engine vendored third_party contains glad
+    if(DEFINED ame_engine_SOURCE_DIR)
+      target_include_directories(ame PRIVATE "${ame_engine_SOURCE_DIR}/third_party")
+    endif()
+    # Force-include glad/gl.h so PFNGL* typedefs are visible to all engine translation units
+    target_compile_options(ame PRIVATE /FIglad/gl.h)
+    message(STATUS "MSVC: Force-including glad/gl.h for ame to provide PFNGL* typedefs")
+  endif()
+endif()
+
 # Generate dialogues from YAML files
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_custom_command(
