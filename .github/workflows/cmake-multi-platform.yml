@@ -150,7 +150,7 @@ jobs:
         git clone https://github.com/microsoft/vcpkg.git "$Env:USERPROFILE\\vcpkg"
         & "$Env:USERPROFILE\\vcpkg\\bootstrap-vcpkg.bat"
         # Install SDL3 stack (shared) and other deps (static where appropriate) to speed up builds
-        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install sdl3 sdl3-image[libjpeg-turbo,libpng,webp] sdl3-ttf portaudio opus opusfile glm --triplet x64-windows
+        & "$Env:USERPROFILE\\vcpkg\\vcpkg.exe" install sdl3 sdl3-image sdl3-ttf portaudio opus opusfile glm --triplet x64-windows
         # Expose VCPKG_ROOT and PKG_CONFIG_PATH for later steps (pkgconfiglite)
         echo "VCPKG_ROOT=$Env:USERPROFILE\\vcpkg" >> $Env:GITHUB_ENV
         echo "PKG_CONFIG_PATH=$Env:USERPROFILE\\vcpkg\\installed\\x64-windows\\lib\\pkgconfig;$Env:USERPROFILE\\vcpkg\\installed\\x64-windows\\share\\pkgconfig" >> $Env:GITHUB_ENV
